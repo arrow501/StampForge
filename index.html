@@ -929,7 +929,8 @@ function getStampRect() {
   const key = pageKey(S.pages[S.cursor]?.fileIdx, S.pages[S.cursor]?.pageNum);
   let pos;
   if (S.stampPositions[key]) {
-    pos = S.stampPositions[key];
+    // Stored as normalized fractions — convert to canvas pixels
+    pos = { x: S.stampPositions[key].x * W, y: S.stampPositions[key].y * H };
   } else if (S.autoPlace) {
     pos = computeAutoPos(W, H, sw, sh);
   } else {
@@ -1130,7 +1131,8 @@ $(document).on('mousemove', function(e) {
   ny = Math.max(0, Math.min(H - rect.h, ny));
 
   const key = pageKey(S.pages[S.cursor]?.fileIdx, S.pages[S.cursor]?.pageNum);
-  S.stampPositions[key] = { x: nx, y: ny };
+  // Store as normalized fractions so export is resolution-independent
+  S.stampPositions[key] = { x: nx / W, y: ny / H };
   refreshStampOverlay();
 });
 
