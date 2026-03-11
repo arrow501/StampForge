@@ -269,18 +269,7 @@ body {
   border-radius: 2px;
   overflow: hidden;
 }
-#minimap-wrap.disabled {
-  opacity: 0.35;
-  pointer-events: none;
-  cursor: default;
-}
 #minimap-wrap canvas { display: block; width: 100%; }
-#minimap-stamp {
-  position: absolute;
-  background: rgba(255,107,53,0.25);
-  border: 1.5px solid var(--accent);
-  pointer-events: none;
-}
 
 /* ── CANVAS AREA ── */
 #canvas-area {
@@ -486,7 +475,6 @@ body {
       </div>
       <div id="minimap-wrap">
         <canvas id="minimap-canvas" width="236" height="333"></canvas>
-        <div id="minimap-stamp"></div>
       </div>
       <div style="font-size:9px;color:var(--muted);margin-top:4px;font-family:'JetBrains Mono',monospace;">
         draw rect · defines search zone
@@ -577,6 +565,8 @@ function currentEntry() { return S.pages[S.cursor]; }
 const mmCanvas = document.getElementById('minimap-canvas');
 const mmCtx = mmCanvas.getContext('2d');
 
+const MM_DOT_R = 6; // hit radius for default-pos dot in canvas px
+
 function drawMinimap() {
   const W = mmCanvas.width, H = mmCanvas.height;
   mmCtx.clearRect(0, 0, W, H);
@@ -593,16 +583,16 @@ function drawMinimap() {
     mmCtx.beginPath(); mmCtx.moveTo(indent, y); mmCtx.lineTo(W - 10, y); mmCtx.stroke();
   }
 
-  // Search area zone (only when autoPlace is on)
+  // Auto area — only when autoPlace is on
   if (S.autoPlace) {
     const a = S.autoArea;
     const ax = a.x * W, ay = a.y * H, aw = a.w * W, ah = a.h * H;
     // Hatched fill
     mmCtx.save();
     mmCtx.beginPath(); mmCtx.rect(ax, ay, aw, ah); mmCtx.clip();
-    mmCtx.fillStyle = 'rgba(255,107,53,0.08)';
+    mmCtx.fillStyle = 'rgba(255,107,53,0.07)';
     mmCtx.fillRect(ax, ay, aw, ah);
-    mmCtx.strokeStyle = 'rgba(255,107,53,0.2)';
+    mmCtx.strokeStyle = 'rgba(255,107,53,0.18)';
     mmCtx.lineWidth = 0.8;
     for (let d = -ah; d < aw + ah; d += 6) {
       mmCtx.beginPath(); mmCtx.moveTo(ax + d, ay); mmCtx.lineTo(ax + d + ah, ay + ah); mmCtx.stroke();
@@ -611,57 +601,97 @@ function drawMinimap() {
     // Border
     mmCtx.strokeStyle = '#FF6B35';
     mmCtx.lineWidth = 1.5;
+    mmCtx.setLineDash([3, 2]);
+    mmCtx.strokeRect(ax + 0.75, ay + 0.75, aw - 1.5, ah - 1.5);
     mmCtx.setLineDash([]);
-    mmCtx.strokeRect(ax, ay, aw, ah);
-    // Resize handle
+    // Resize handle (bottom-right corner square)
     mmCtx.fillStyle = '#FF6B35';
-    mmCtx.fillRect(ax + aw - 5, ay + ah - 5, 5, 5);
+    mmCtx.fillRect(ax + aw - 6, ay + ah - 6, 6, 6);
   }
 
-  // Stamp rect at defaultPos (fallback indicator)
-  const sw = W * S.stampSize;
-  const sh = sw * (S.stamp ? S.stamp.height / S.stamp.width : 0.5);
-  const sx = S.defaultPos.x * W;
-  const sy = S.defaultPos.y * H;
-  $('#minimap-stamp').css({
-    left: sx + 'px', top: sy + 'px',
-    width: sw + 'px', height: sh + 'px'
-  });
+  // Default pos dot — always visible, drawn on top
+  const dx = S.defaultPos.x * W;
+  const dy = S.defaultPos.y * H;
+
+  // Shadow
+  mmCtx.save();
+  mmCtx.shadowColor = 'rgba(0,0,0,0.3)';
+  mmCtx.shadowBlur = 3;
+  mmCtx.fillStyle = '#FF6B35';
+  mmCtx.beginPath();
+  mmCtx.arc(dx, dy, MM_DOT_R, 0, Math.PI * 2);
+  mmCtx.fill();
+  mmCtx.restore();
+
+  // White ring
+  mmCtx.strokeStyle = '#fff';
+  mmCtx.lineWidth = 1.5;
+  mmCtx.beginPath();
+  mmCtx.arc(dx, dy, MM_DOT_R, 0, Math.PI * 2);
+  mmCtx.stroke();
+
+  // Crosshair lines scoped to area (or full canvas if no area)
+  const cx_x0 = S.autoPlace ? S.autoArea.x * W : 0;
+  const cx_y0 = S.autoPlace ? S.autoArea.y * H : 0;
+  const cx_x1 = S.autoPlace ? (S.autoArea.x + S.autoArea.w) * W : W;
+  const cx_y1 = S.autoPlace ? (S.autoArea.y + S.autoArea.h) * H : H;
+  mmCtx.strokeStyle = 'rgba(255,107,53,0.4)';
+  mmCtx.lineWidth = 0.5;
+  mmCtx.setLineDash([2, 2]);
+  mmCtx.beginPath(); mmCtx.moveTo(dx, cx_y0); mmCtx.lineTo(dx, cx_y1); mmCtx.stroke();
+  mmCtx.beginPath(); mmCtx.moveTo(cx_x0, dy); mmCtx.lineTo(cx_x1, dy); mmCtx.stroke();
+  mmCtx.setLineDash([]);
 }
 
-// Minimap interaction: draw zone rect (mousedown → drag → mouseup)
-let mmMode = null; // 'draw' | 'move' | 'resize'
+// Minimap interaction
+let mmMode = null; // 'pos' | 'area-draw' | 'area-move' | 'area-resize'
 let mmStart = null;
 let mmAreaStart = null;
 
+function mmHitTest(mx, my) {
+  // 1. Default pos dot — always highest priority
+  const dx = S.defaultPos.x, dy = S.defaultPos.y;
+  const W = mmCanvas.width, H = mmCanvas.height;
+  const dotHit = MM_DOT_R / Math.min(W, H) * 2; // normalized hit radius
+  if (Math.hypot(mx - dx, my - dy) < dotHit) return 'pos';
+
+  if (!S.autoPlace) return 'pos-draw'; // click outside dot when no area → move pos
+
+  const a = S.autoArea;
+  // Resize handle
+  if (Math.abs(mx - (a.x + a.w)) < 0.05 && Math.abs(my - (a.y + a.h)) < 0.05) return 'area-resize';
+  // Inside area → move
+  if (mx >= a.x && mx <= a.x + a.w && my >= a.y && my <= a.y + a.h) return 'area-move';
+  // Outside → draw new area
+  return 'area-draw';
+}
+
 $('#minimap-wrap').on('mousedown', function(e) {
-  if (!S.autoPlace) return;
   const rect = mmCanvas.getBoundingClientRect();
   const W = rect.width, H = rect.height;
   const mx = (e.clientX - rect.left) / W;
   const my = (e.clientY - rect.top) / H;
 
-  const a = S.autoArea;
-  // Check resize handle (bottom-right corner)
-  const rx = a.x + a.w, ry = a.y + a.h;
-  if (Math.abs(mx - rx) < 0.05 && Math.abs(my - ry) < 0.05) {
-    mmMode = 'resize';
-    mmStart = { mx, my };
-    mmAreaStart = { ...a };
-    return;
-  }
-  // Check if inside existing area → move
-  if (mx >= a.x && mx <= a.x + a.w && my >= a.y && my <= a.y + a.h) {
-    mmMode = 'move';
-    mmStart = { mx, my };
-    mmAreaStart = { ...a };
-    return;
-  }
-  // Otherwise → draw new rect
-  mmMode = 'draw';
+  const hit = mmHitTest(mx, my);
   mmStart = { mx, my };
-  S.autoArea = { x: mx, y: my, w: 0, h: 0 };
-  drawMinimap();
+  mmAreaStart = S.autoArea ? { ...S.autoArea } : null;
+
+  if (hit === 'pos') {
+    mmMode = 'pos';
+  } else if (hit === 'pos-draw') {
+    mmMode = 'pos';
+    S.defaultPos = { x: Math.max(0, Math.min(1, mx)), y: Math.max(0, Math.min(1, my)) };
+    drawMinimap();
+  } else if (hit === 'area-resize') {
+    mmMode = 'area-resize';
+  } else if (hit === 'area-move') {
+    mmMode = 'area-move';
+  } else {
+    mmMode = 'area-draw';
+    S.autoArea = { x: mx, y: my, w: 0, h: 0 };
+    drawMinimap();
+  }
+  e.preventDefault();
 }).on('mousemove', function(e) {
   if (!mmMode) return;
   const rect = mmCanvas.getBoundingClientRect();
@@ -669,23 +699,24 @@ $('#minimap-wrap').on('mousedown', function(e) {
   const mx = (e.clientX - rect.left) / W;
   const my = (e.clientY - rect.top) / H;
 
-  if (mmMode === 'draw') {
+  if (mmMode === 'pos') {
+    S.defaultPos = { x: Math.max(0, Math.min(1, mx)), y: Math.max(0, Math.min(1, my)) };
+  } else if (mmMode === 'area-draw') {
     const x = Math.min(mx, mmStart.mx);
     const y = Math.min(my, mmStart.my);
-    const w = Math.abs(mx - mmStart.mx);
-    const h = Math.abs(my - mmStart.my);
     S.autoArea = {
       x: Math.max(0, x), y: Math.max(0, y),
-      w: Math.min(w, 1 - x), h: Math.min(h, 1 - y)
+      w: Math.min(Math.abs(mx - mmStart.mx), 1 - Math.max(0, x)),
+      h: Math.min(Math.abs(my - mmStart.my), 1 - Math.max(0, y))
     };
-  } else if (mmMode === 'move') {
+  } else if (mmMode === 'area-move') {
     const dx = mx - mmStart.mx, dy = my - mmStart.my;
     S.autoArea = {
       x: Math.max(0, Math.min(1 - mmAreaStart.w, mmAreaStart.x + dx)),
       y: Math.max(0, Math.min(1 - mmAreaStart.h, mmAreaStart.y + dy)),
       w: mmAreaStart.w, h: mmAreaStart.h
     };
-  } else if (mmMode === 'resize') {
+  } else if (mmMode === 'area-resize') {
     const dx = mx - mmStart.mx, dy = my - mmStart.my;
     S.autoArea = {
       x: mmAreaStart.x, y: mmAreaStart.y,
@@ -699,30 +730,21 @@ $('#minimap-wrap').on('mousedown', function(e) {
 });
 
 $(document).on('mouseup', function() {
-  if (mmMode) {
-    // Normalize: ensure minimum size
+  if (!mmMode) return;
+  if (mmMode === 'area-draw') {
+    // Too small → reset to default zone
     if (S.autoArea.w < 0.05 || S.autoArea.h < 0.05) {
-      // Too small — reset to sensible default around click point
-      S.autoArea = {
-        x: Math.max(0, S.autoArea.x - 0.2),
-        y: Math.max(0, S.autoArea.y - 0.15),
-        w: 0.4, h: 0.3
-      };
+      S.autoArea = { x: Math.max(0, mmStart.mx - 0.2), y: Math.max(0, mmStart.my - 0.15), w: 0.4, h: 0.3 };
     }
-    // Update defaultPos to center of drawn area
-    S.defaultPos = {
-      x: S.autoArea.x + S.autoArea.w / 2,
-      y: S.autoArea.y + S.autoArea.h / 2
-    };
-    mmMode = null;
-    drawMinimap();
-    scheduleSave();
+    // Snap defaultPos to center of new area
+    S.defaultPos = { x: S.autoArea.x + S.autoArea.w / 2, y: S.autoArea.y + S.autoArea.h / 2 };
   }
-  if (mmDragging) { mmDragging = false; scheduleSave(); }
+  mmMode = null;
+  drawMinimap();
+  scheduleSave();
 });
 
-// Keep mmDragging for compatibility (no longer used but mouseup checks it)
-let mmDragging = false;
+let mmDragging = false; // kept for legacy mouseup compat
 
 drawMinimap();
 
@@ -1227,8 +1249,7 @@ const opacitySlider = makeSlider('opacity-track', 'opacity-fill', 'opacity-thumb
 
 $('#auto-place').on('change', function() {
   S.autoPlace = this.checked;
-  // Lock minimap when auto-find is OFF (minimap is only the search origin / fallback when on)
-  $('#minimap-wrap').toggleClass('disabled', !this.checked);
+  drawMinimap();
   refreshStampOverlay();
   scheduleSave();
 });
@@ -1377,7 +1398,7 @@ function restoreState() {
     if (data.autoPlace !== undefined) {
       S.autoPlace = data.autoPlace;
       $('#auto-place').prop('checked', data.autoPlace);
-      $('#minimap-wrap').toggleClass('disabled', !data.autoPlace);
+      drawMinimap();
     }
     if (data.stampPositions) S.stampPositions = data.stampPositions;
     if (data.stampDataURL) {
