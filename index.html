@@ -800,8 +800,9 @@ function removeFile(fi) {
   S.files[fi]._removed = true;
   // Remove pages
   S.pages = S.pages.filter(p => p.fileIdx !== fi);
-  // Clear cache
+  // Clear cache and per-page position overrides for this file
   Object.keys(S.renderCache).forEach(k => { if (k.startsWith(fi+':')) delete S.renderCache[k]; });
+  Object.keys(S.stampPositions).forEach(k => { if (k.startsWith(fi+':')) delete S.stampPositions[k]; });
   $fileList.find(`[data-fi="${fi}"]`).remove();
   if (!S.pages.length) {
     $('#empty-state').show(); $pageWrap.hide();
@@ -1380,7 +1381,6 @@ function saveState() {
       defaultPos: S.defaultPos,
       autoArea: S.autoArea,
       autoPlace: S.autoPlace,
-      stampPositions: S.stampPositions,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch(e) { /* storage full or unavailable */ }
@@ -1400,7 +1400,6 @@ function restoreState() {
       $('#auto-place').prop('checked', data.autoPlace);
       drawMinimap();
     }
-    if (data.stampPositions) S.stampPositions = data.stampPositions;
     if (data.stampDataURL) {
       S.stampDataURL = data.stampDataURL;
       const img = new Image();
