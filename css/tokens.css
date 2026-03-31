@@ -1,0 +1,70 @@
+/*
+ * Design tokens — Adwaita dark palette.
+ * Inspired by mclellac/adwaita-web (MIT licence, https://github.com/mclellac/adwaita-web)
+ * and the GNOME Human Interface Guidelines.
+ * Custom implementation for StampForge v2.
+ */
+
+:root {
+  /* Backgrounds */
+  --window-bg:    #1c1c1c;
+  --sidebar-bg:   #242424;
+  --surface:      #2a2a2a;
+  --card-bg:      #303030;
+  --card-hover:   #383838;
+  --overlay-bg:   rgba(0, 0, 0, 0.65);
+
+  /* Borders */
+  --border:       rgba(255, 255, 255, 0.10);
+  --border-focus: rgba(255, 255, 255, 0.22);
+
+  /* Accent (GNOME blue) */
+  --accent:       #3584e4;
+  --accent-light: #78b0f8;
+  --accent-dim:   rgba(53, 132, 228, 0.20);
+
+  /* Status colours */
+  --green:        #57e389;
+  --yellow:       #f8e45c;
+  --red:          #ff7b63;
+  --orange:       #ffa348;
+
+  /* Text */
+  --text-1:       rgba(255, 255, 255, 0.87);
+  --text-2:       rgba(255, 255, 255, 0.55);
+  --text-3:       rgba(255, 255, 255, 0.30);
+  --text-accent:  var(--accent-light);
+
+  /* Radii */
+  --r-xs: 4px;
+  --r-s:  6px;
+  --r-m:  10px;
+  --r-l:  14px;
+
+  /* Spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Typography */
+  --font-ui:   'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   16px;
+
+  /* Transitions */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 100ms;
+  --dur-mid:  200ms;
+
+  /* Sidebar width */
+  --sidebar-w: 280px;
+
+  /* Header height */
+  --header-h: 46px;
+}

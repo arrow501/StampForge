@@ -1,0 +1,88 @@
+/* Canvas preview area */
+
+/* ── Canvas wrapper ── */
+#canvas-wrap {
+  position: relative;
+  line-height: 0;
+  border-radius: var(--r-m);
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  max-width: 100%;
+}
+
+#page-canvas {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--r-m);
+}
+
+/* Stamp overlay sits exactly on top of page canvas */
+#stamp-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: var(--r-m);
+  cursor: default;
+}
+
+/* Skip badge — shown over the canvas when current page is skipped */
+#skip-badge {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  background: var(--orange);
+  color: #000;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--r-s);
+  pointer-events: none;
+  display: none;
+}
+
+#skip-badge.visible { display: block; }
+
+/* ── Stamp drag handles (drawn on stamp-canvas, but also via DOM divs) ──
+   We use pure-canvas rendering, so these CSS classes are for future
+   accessibility / tooltip anchors only.                                  */
+
+#canvas-wrap.dragging { cursor: grabbing; }
+#stamp-canvas.over-stamp { cursor: grab; }
+
+/* ── Auto-place panel ── */
+#autoplace-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  flex: 1;
+}
+
+#autoplace-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* ── Minimap ── */
+#minimap-wrap {
+  flex-shrink: 0;
+}
+
+#minimap {
+  display: block;
+  border-radius: var(--r-s);
+  border: 1px solid var(--border);
+  cursor: crosshair;
+  background: var(--card-bg);
+}
+
+.minimap-hint {
+  font-size: var(--text-sm);
+  color: var(--text-3);
+  margin-top: var(--sp-1);
+  line-height: 1.3;
+}

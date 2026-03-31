@@ -1,1568 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StampForge</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-<style>
-:root {
-  --bg:       #1a1a1a;
-  --surface:  #252525;
-  --surface2: #2e2e2e;
-  --border:   #3a3a3a;
-  --border2:  #444;
-  --accent:   #FF6B35;
-  --accent2:  #e55a20;
-  --text:     #e0e0e0;
-  --muted:    #888;
-  --danger:   #ff4444;
-  --sidebar-w: 260px;
-}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StampForge</title>
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <!-- External libraries (globals: pdfjsLib, PDFLib) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  height: 100vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  font-size: 13px;
-}
+  <!-- Import map: resolves 'jquery' to jQuery 4 ESM -->
+  <script type="importmap">
+    {
+      "imports": {
+        "jquery": "https://cdn.jsdelivr.net/npm/jquery@4.0.0-rc.2/dist/jquery.esm.min.js"
+      }
+    }
+  </script>
 
-/* ── HEADER ── */
-#header {
-  height: 40px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  gap: 12px;
-  flex-shrink: 0;
-  z-index: 10;
-}
-#header .logo {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 3px;
-  color: var(--accent);
-  text-transform: uppercase;
-}
-#header .sep { flex: 1; }
-#nav-info {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: var(--muted);
-  min-width: 180px;
-  text-align: right;
-}
-#btn-process {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  padding: 5px 14px;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  cursor: pointer;
-  border-radius: 3px;
-  transition: background 0.15s;
-}
-#btn-process:hover { background: var(--accent2); }
-#btn-process:disabled { background: var(--border); color: var(--muted); cursor: default; }
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/preview.css" />
 
-/* ── MAIN LAYOUT ── */
-#main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-/* ── SIDEBAR ── */
-#sidebar {
-  width: var(--sidebar-w);
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  flex-shrink: 0;
-}
-
-.sb-section {
-  border-bottom: 1px solid var(--border);
-  padding: 10px 12px;
-}
-.sb-label {
-  font-size: 9px;
-  font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 2px;
-  color: var(--muted);
-  text-transform: uppercase;
-  margin-bottom: 8px;
-}
-
-/* Drop zone */
-#drop-zone {
-  border: 1px dashed var(--border2);
-  padding: 14px 8px;
-  text-align: center;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--muted);
-  transition: border-color 0.15s, color 0.15s;
-  position: relative;
-  border-radius: 3px;
-}
-#drop-zone:hover, #drop-zone.drag-over {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-#drop-zone input[type=file] {
-  position: absolute; inset: 0; opacity: 0; cursor: pointer;
-}
-#drop-zone .icon { font-size: 18px; margin-bottom: 4px; }
-
-/* File list */
-#file-list { max-height: 110px; overflow-y: auto; margin-top: 6px; }
-.file-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  font-size: 10px;
-  cursor: pointer;
-  border-radius: 2px;
-  transition: background 0.1s;
-}
-.file-item:hover { background: var(--surface2); }
-.file-item.active { background: var(--surface2); color: var(--accent); }
-.file-item .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-item .pages { color: var(--muted); flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
-.file-item .remove {
-  color: var(--muted); flex-shrink: 0; cursor: pointer; opacity: 0;
-  transition: opacity 0.1s;
-}
-.file-item:hover .remove { opacity: 1; }
-.file-item .remove:hover { color: var(--danger); }
-
-/* Stamp section */
-#stamp-drop {
-  border: 1px dashed var(--border2);
-  height: 76px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  color: var(--muted);
-  cursor: pointer;
-  transition: border-color 0.15s;
-  position: relative;
-  overflow: hidden;
-  border-radius: 3px;
-}
-#stamp-drop:hover { border-color: var(--accent); }
-#stamp-drop input[type=file] {
-  position: absolute; inset: 0; opacity: 0; cursor: pointer;
-}
-#stamp-preview-thumb {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  display: none;
-}
-
-/* Slider */
-.slider-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  height: 22px;
-}
-.slider-row label { font-size: 10px; color: var(--muted); width: 52px; flex-shrink: 0; }
-.sl-track {
-  position: relative;
-  flex: 1;
-  height: 6px;
-  background: var(--border2);
-  border-radius: 3px;
-  cursor: pointer;
-}
-.sl-fill {
-  position: absolute;
-  top: 0; left: 0; height: 100%;
-  background: var(--accent);
-  border-radius: 3px;
-  pointer-events: none;
-}
-.sl-thumb {
-  position: absolute;
-  top: 50%;
-  width: 12px; height: 12px;
-  background: #ddd;
-  border-radius: 2px;
-  transform: translate(-50%, -50%);
-  cursor: grab;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-  transition: background 0.1s;
-}
-.sl-thumb:hover { background: #fff; }
-.sl-thumb.dragging { cursor: grabbing; background: var(--accent); }
-.slider-row .val {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: var(--accent);
-  width: 32px;
-  text-align: right;
-}
-
-/* Auto-place toggle */
-.toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 10px;
-}
-.toggle-row span { color: var(--muted); }
-.toggle {
-  position: relative;
-  width: 32px; height: 16px;
-  cursor: pointer;
-}
-.toggle input { opacity: 0; width: 0; height: 0; }
-.toggle-track {
-  position: absolute; inset: 0;
-  background: var(--border2);
-  border-radius: 8px;
-  transition: background 0.2s;
-}
-.toggle input:checked ~ .toggle-track { background: var(--accent); }
-.toggle-thumb {
-  position: absolute;
-  top: 2px; left: 2px;
-  width: 12px; height: 12px;
-  background: #fff;
-  border-radius: 50%;
-  transition: left 0.2s;
-}
-.toggle input:checked ~ .toggle-thumb { left: 18px; }
-
-/* Default position minimap */
-#minimap-wrap {
-  position: relative;
-  background: #fff;
-  cursor: crosshair;
-  user-select: none;
-  border-radius: 2px;
-  overflow: hidden;
-}
-#minimap-wrap canvas { display: block; width: 100%; }
-
-/* ── CANVAS AREA ── */
-#canvas-area {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-}
-
-/* Empty state */
-#empty-state {
-  text-align: center;
-  color: var(--muted);
-  pointer-events: none;
-}
-#empty-state .big { font-size: 40px; margin-bottom: 10px; }
-#empty-state p { font-size: 11px; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; }
-
-/* Page canvas wrapper */
-#page-wrap {
-  position: relative;
-  display: none;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
-}
-#page-canvas { display: block; }
-#stamp-overlay {
-  position: absolute;
-  top: 0; left: 0;
-  pointer-events: none;
-  display: none;
-}
-#stamp-drag-handle {
-  position: absolute;
-  border: 2px solid var(--accent);
-  background: rgba(255,107,53,0.1);
-  cursor: move;
-  display: none;
-  z-index: 5;
-}
-#stamp-drag-handle::after {
-  content: '⠿';
-  position: absolute;
-  bottom: 2px; right: 4px;
-  font-size: 10px;
-  color: var(--accent);
-  opacity: 0.7;
-}
-#stamp-drag-handle.pinned {
-  border-color: #22c55e;
-  background: rgba(34,197,94,0.1);
-}
-
-/* Nav arrows */
-#nav-prev, #nav-next {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(37,37,37,0.88);
-  border: 1px solid var(--border);
-  color: var(--text);
-  width: 32px; height: 52px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  font-size: 16px;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  z-index: 20;
-  user-select: none;
-  border-radius: 2px;
-}
-#nav-prev { left: 10px; }
-#nav-next { right: 10px; }
-#nav-prev:hover, #nav-next:hover {
-  background: var(--surface2);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-#nav-prev.hidden, #nav-next.hidden { opacity: 0; pointer-events: none; }
-
-/* Progress bar */
-#progress-bar {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 2px;
-  background: var(--border);
-  z-index: 20;
-}
-#progress-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.2s;
-}
-
-/* Toast */
-#toast {
-  position: fixed;
-  bottom: 16px; right: 16px;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  border-left: 3px solid var(--accent);
-  color: var(--text);
-  padding: 7px 12px;
-  font-size: 11px;
-  font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 0.5px;
-  z-index: 100;
-  opacity: 0;
-  transition: opacity 0.2s, transform 0.2s;
-  pointer-events: none;
-  transform: translateY(6px);
-  border-radius: 2px;
-}
-#toast.show { opacity: 1; transform: translateY(0); }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-/* Processing overlay */
-#proc-overlay {
-  display: none;
-  position: fixed; inset: 0;
-  background: rgba(26,26,26,0.88);
-  z-index: 200;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 14px;
-}
-#proc-overlay.show { display: flex; }
-#proc-bar-wrap {
-  width: 300px;
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-}
-#proc-bar { height: 100%; background: var(--accent); width: 0; transition: width 0.1s; border-radius: 2px; }
-#proc-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
-</style>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
 
-<div id="header">
-  <span class="logo">StampForge</span>
-  <span class="sep"></span>
-  <span id="nav-info">no documents loaded</span>
-  <button id="btn-process" disabled>▼ Export All</button>
+<div id="app">
+
+  <!-- ── Header bar ── -->
+  <header id="header">
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <rect x="2" y="2" width="18" height="18" rx="3" fill="#3584e4" opacity="0.15"/>
+        <rect x="2" y="2" width="18" height="18" rx="3" stroke="#3584e4" stroke-width="1.5"/>
+        <path d="M6 15 L9 7 L11 12 L13 9 L16 15" stroke="#3584e4" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      StampForge
+      <span style="font-size:11px;color:var(--text-3);font-weight:400;margin-left:2px">v2</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <button id="btn-export" class="btn btn-primary" disabled>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Export All
+    </button>
+  </header>
+
+  <!-- ── Body ── -->
+  <div id="body">
+
+    <!-- ── Sidebar ── -->
+    <aside id="sidebar">
+      <div id="sidebar-scroll">
+
+        <!-- Files section -->
+        <div class="section" id="section-files">
+          <div class="section-header">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <path d="M2 2h4l1.5 1.5H11a1 1 0 0 1 1 1V10a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"
+                    stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+            Files
+            <span class="chevron">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M2 4l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </span>
+          </div>
+          <div class="section-body">
+            <div id="file-list"></div>
+            <div style="padding: var(--sp-1) var(--sp-3);">
+              <button id="btn-add-files" class="btn btn-ghost" style="width:100%;justify-content:center;">
+                + Add PDFs
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pages section -->
+        <div class="section" id="section-pages">
+          <div class="section-header">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <rect x="2" y="1" width="9" height="11" rx="1" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M4 4h5M4 6.5h5M4 9h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+            </svg>
+            Pages
+            <span class="chevron">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M2 4l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </span>
+          </div>
+          <div class="section-body">
+            <div id="page-list"></div>
+            <div style="padding: var(--sp-2) var(--sp-3) var(--sp-1);">
+              <label style="font-size:var(--text-sm);color:var(--text-2);display:block;margin-bottom:4px;">
+                Skip pages (e.g. 1-3, 5)
+              </label>
+              <div style="display:flex;gap:var(--sp-2);">
+                <input id="skip-range-input" type="text" class="text-input" placeholder="1-3, 5, 8-10" />
+                <button id="btn-apply-skip" class="btn btn-ghost" style="flex-shrink:0;">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stamps section -->
+        <div class="section" id="section-stamps">
+          <div class="section-header">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <circle cx="6.5" cy="5" r="3" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M3 11c0-2 1.5-3 3.5-3s3.5 1 3.5 3" stroke="currentColor" stroke-width="1.2"
+                    stroke-linecap="round"/>
+            </svg>
+            Stamps
+            <span class="chevron">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M2 4l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </span>
+          </div>
+          <div class="section-body">
+            <div id="stamp-palette" class="stamp-palette"></div>
+
+            <div class="slider-row">
+              <span class="slider-label">Size</span>
+              <input type="range" id="slider-size" min="5" max="60" step="1" value="25" />
+              <span class="slider-val" id="val-size">25%</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Opacity</span>
+              <input type="range" id="slider-opacity" min="10" max="100" step="1" value="100" />
+              <span class="slider-val" id="val-opacity">100%</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /sidebar-scroll -->
+
+      <!-- Hidden file inputs -->
+      <input type="file" id="input-pdfs" accept=".pdf" multiple style="display:none" />
+      <input type="file" id="input-stamp" accept="image/png,image/jpeg,image/webp" style="display:none" />
+    </aside>
+
+    <!-- ── Content area ── -->
+    <main id="content">
+
+      <!-- Preview area -->
+      <div id="preview-area">
+        <div id="empty-state">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <rect x="12" y="8" width="40" height="48" rx="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M20 20h24M20 28h24M20 36h16" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round"/>
+          </svg>
+          <p>Load PDFs to begin</p>
+        </div>
+
+        <div id="canvas-wrap" style="display:none">
+          <canvas id="page-canvas"></canvas>
+          <canvas id="stamp-canvas"></canvas>
+          <div id="skip-badge">SKIP</div>
+        </div>
+      </div>
+
+      <!-- Bottom bar: navigation + auto-place controls -->
+      <div id="bottom-bar">
+        <div class="nav-bar">
+          <button id="btn-prev" class="btn btn-icon btn-ghost" title="Previous (←)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <span class="page-counter" id="page-counter">— / —</span>
+          <button id="btn-next" class="btn btn-icon btn-ghost" title="Next (→)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <div id="autoplace-panel">
+          <div id="autoplace-toggle-row">
+            <input type="checkbox" id="chk-autoplace" checked />
+            <label for="chk-autoplace" style="cursor:pointer;font-size:var(--text-sm);color:var(--text-2)">Auto-place</label>
+          </div>
+
+          <div id="minimap-wrap">
+            <canvas id="minimap" width="140" height="100"></canvas>
+            <div class="minimap-hint">Draw zone · drag pos</div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div><!-- /body -->
+</div><!-- /app -->
+
+<!-- Progress overlay -->
+<div id="progress-overlay" class="hidden">
+  <div class="progress-card">
+    <div class="progress-title">Exporting…</div>
+    <div class="progress-msg" id="progress-msg">Preparing…</div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar"></div>
+    </div>
+  </div>
 </div>
 
-<div id="main">
-  <!-- SIDEBAR -->
-  <div id="sidebar">
+<!-- Drop overlay -->
+<div id="drop-overlay"><p>Drop PDFs or stamp image</p></div>
 
-    <div class="sb-section">
-      <div class="sb-label">Documents</div>
-      <div id="drop-zone">
-        <input type="file" id="pdf-input" accept=".pdf" multiple>
-        <div class="icon">📄</div>
-        <div>Drop PDFs or click</div>
-      </div>
-      <div id="file-list"></div>
-    </div>
-
-    <div class="sb-section">
-      <div class="sb-label">Stamp</div>
-      <div id="stamp-drop">
-        <input type="file" id="stamp-input" accept="image/png,image/jpeg,image/webp">
-        <img id="stamp-preview-thumb" alt="stamp">
-        <div id="stamp-placeholder">
-          <div>📋 Paste or open image</div>
-        </div>
-      </div>
-      <div class="slider-row">
-        <label>Size</label>
-        <div class="sl-track" id="size-track">
-          <div class="sl-fill" id="size-fill" style="width:20%"></div>
-          <div class="sl-thumb" id="size-thumb" style="left:20%"></div>
-        </div>
-        <span class="val" id="size-val">20%</span>
-      </div>
-      <div class="slider-row">
-        <label>Opacity</label>
-        <div class="sl-track" id="opacity-track">
-          <div class="sl-fill" id="opacity-fill" style="width:85%"></div>
-          <div class="sl-thumb" id="opacity-thumb" style="left:85%"></div>
-        </div>
-        <span class="val" id="opacity-val">85%</span>
-      </div>
-    </div>
-
-    <div class="sb-section">
-      <div class="sb-label">Placement</div>
-      <div class="toggle-row">
-        <span>Auto-find space</span>
-        <label class="toggle">
-          <input type="checkbox" id="auto-place" checked>
-          <span class="toggle-track"></span>
-          <span class="toggle-thumb"></span>
-        </label>
-      </div>
-      <div id="minimap-wrap">
-        <canvas id="minimap-canvas" width="236" height="333"></canvas>
-      </div>
-      <div style="font-size:9px;color:var(--muted);margin-top:4px;font-family:'JetBrains Mono',monospace;">
-        draw rect · defines search zone
-      </div>
-    </div>
-
-  </div>
-
-  <!-- CANVAS AREA -->
-  <div id="canvas-area" tabindex="0">
-    <div id="empty-state">
-      <div class="big">◫</div>
-      <p>Load PDFs to begin</p>
-    </div>
-
-    <div id="page-wrap">
-      <canvas id="page-canvas"></canvas>
-      <canvas id="stamp-overlay"></canvas>
-      <div id="stamp-drag-handle"></div>
-    </div>
-
-    <div id="nav-prev" class="hidden">‹</div>
-    <div id="nav-next" class="hidden">›</div>
-
-    <div id="progress-bar"><div id="progress-fill"></div></div>
-  </div>
-</div>
-
+<!-- Toast -->
 <div id="toast"></div>
 
-<div id="proc-overlay">
-  <div style="font-size:13px;letter-spacing:3px;color:var(--accent)">PROCESSING</div>
-  <div id="proc-bar-wrap"><div id="proc-bar"></div></div>
-  <div id="proc-label">Loading...</div>
-</div>
+<!-- App entry point -->
+<script type="module" src="js/app.js"></script>
 
-<script>
-// ── PDF.js worker ──
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-// ── State ──
-const S = {
-  files: [],        // [{name, arrayBuffer, pdfDoc, pageCount}]
-  pages: [],        // flat list: [{fileIdx, pageNum (1-based)}]
-  cursor: 0,        // current index in S.pages
-  renderCache: {},  // key: "fi:pg" → ImageBitmap
-  stamp: null,      // ImageBitmap
-  stampImg: null,   // HTMLImageElement (for export)
-  stampSize: 0.20,
-  stampOpacity: 0.85,
-  // Per-page overrides: key "fi:pg" → {x,y} normalized 0..1 (top-left of stamp)
-  // null means "use auto/default"
-  stampPositions: {},
-  defaultPos: { x: 0.6, y: 0.75 }, // normalized, search origin / fallback when no area
-  autoArea: { x: 0.5, y: 0.65, w: 0.45, h: 0.3 }, // normalized search zone for auto-placement
-  autoPlace: true,
-  dragging: false,
-  dragOffX: 0, dragOffY: 0,
-};
-
-// ── DOM refs ──
-const $canvasArea = $('#canvas-area');
-const $pageWrap   = $('#page-wrap');
-const $pageCanvas = document.getElementById('page-canvas');
-const $stampOver  = document.getElementById('stamp-overlay');
-const $dragHandle = document.getElementById('stamp-drag-handle');
-const $navPrev    = $('#nav-prev');
-const $navNext    = $('#nav-next');
-const $navInfo    = $('#nav-info');
-const $fileList   = $('#file-list');
-
-// ── Helpers ──
-function toast(msg, dur=2500) {
-  const $t = $('#toast');
-  $t.text(msg).addClass('show');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => $t.removeClass('show'), dur);
-}
-
-function pageKey(fi, pg) { return fi + ':' + pg; }
-
-function totalPages() { return S.pages.length; }
-
-function currentEntry() { return S.pages[S.cursor]; }
-
-// ── Minimap ──
-const mmCanvas = document.getElementById('minimap-canvas');
-const mmCtx = mmCanvas.getContext('2d');
-
-const MM_DOT_R = 6; // hit radius for default-pos dot in canvas px
-
-function drawMinimap() {
-  const W = mmCanvas.width, H = mmCanvas.height;
-  mmCtx.clearRect(0, 0, W, H);
-
-  // Page background
-  mmCtx.fillStyle = '#fff';
-  mmCtx.fillRect(0, 0, W, H);
-
-  // Subtle text lines hint
-  mmCtx.strokeStyle = '#ddd';
-  mmCtx.lineWidth = 0.5;
-  for (let y = 18; y < H - 8; y += 14) {
-    const indent = (y % 42 === 0) ? 20 : 10;
-    mmCtx.beginPath(); mmCtx.moveTo(indent, y); mmCtx.lineTo(W - 10, y); mmCtx.stroke();
-  }
-
-  // Auto area — only when autoPlace is on
-  if (S.autoPlace) {
-    const a = S.autoArea;
-    const ax = a.x * W, ay = a.y * H, aw = a.w * W, ah = a.h * H;
-    // Hatched fill
-    mmCtx.save();
-    mmCtx.beginPath(); mmCtx.rect(ax, ay, aw, ah); mmCtx.clip();
-    mmCtx.fillStyle = 'rgba(255,107,53,0.07)';
-    mmCtx.fillRect(ax, ay, aw, ah);
-    mmCtx.strokeStyle = 'rgba(255,107,53,0.18)';
-    mmCtx.lineWidth = 0.8;
-    for (let d = -ah; d < aw + ah; d += 6) {
-      mmCtx.beginPath(); mmCtx.moveTo(ax + d, ay); mmCtx.lineTo(ax + d + ah, ay + ah); mmCtx.stroke();
-    }
-    mmCtx.restore();
-    // Border
-    mmCtx.strokeStyle = '#FF6B35';
-    mmCtx.lineWidth = 1.5;
-    mmCtx.setLineDash([3, 2]);
-    mmCtx.strokeRect(ax + 0.75, ay + 0.75, aw - 1.5, ah - 1.5);
-    mmCtx.setLineDash([]);
-    // Resize handle (bottom-right corner square)
-    mmCtx.fillStyle = '#FF6B35';
-    mmCtx.fillRect(ax + aw - 6, ay + ah - 6, 6, 6);
-  }
-
-  // Default pos dot — always visible, drawn on top
-  const dx = S.defaultPos.x * W;
-  const dy = S.defaultPos.y * H;
-
-  // Shadow
-  mmCtx.save();
-  mmCtx.shadowColor = 'rgba(0,0,0,0.3)';
-  mmCtx.shadowBlur = 3;
-  mmCtx.fillStyle = '#FF6B35';
-  mmCtx.beginPath();
-  mmCtx.arc(dx, dy, MM_DOT_R, 0, Math.PI * 2);
-  mmCtx.fill();
-  mmCtx.restore();
-
-  // White ring
-  mmCtx.strokeStyle = '#fff';
-  mmCtx.lineWidth = 1.5;
-  mmCtx.beginPath();
-  mmCtx.arc(dx, dy, MM_DOT_R, 0, Math.PI * 2);
-  mmCtx.stroke();
-
-  // Crosshair lines scoped to area (or full canvas if no area)
-  const cx_x0 = S.autoPlace ? S.autoArea.x * W : 0;
-  const cx_y0 = S.autoPlace ? S.autoArea.y * H : 0;
-  const cx_x1 = S.autoPlace ? (S.autoArea.x + S.autoArea.w) * W : W;
-  const cx_y1 = S.autoPlace ? (S.autoArea.y + S.autoArea.h) * H : H;
-  mmCtx.strokeStyle = 'rgba(255,107,53,0.4)';
-  mmCtx.lineWidth = 0.5;
-  mmCtx.setLineDash([2, 2]);
-  mmCtx.beginPath(); mmCtx.moveTo(dx, cx_y0); mmCtx.lineTo(dx, cx_y1); mmCtx.stroke();
-  mmCtx.beginPath(); mmCtx.moveTo(cx_x0, dy); mmCtx.lineTo(cx_x1, dy); mmCtx.stroke();
-  mmCtx.setLineDash([]);
-}
-
-// Minimap interaction
-let mmMode = null; // 'pos' | 'area-draw' | 'area-move' | 'area-resize'
-let mmStart = null;
-let mmAreaStart = null;
-
-function mmHitTest(mx, my) {
-  // 1. Default pos dot — always highest priority
-  const dx = S.defaultPos.x, dy = S.defaultPos.y;
-  const W = mmCanvas.width, H = mmCanvas.height;
-  const dotHit = MM_DOT_R / Math.min(W, H) * 2; // normalized hit radius
-  if (Math.hypot(mx - dx, my - dy) < dotHit) return 'pos';
-
-  if (!S.autoPlace) return 'pos-draw'; // click outside dot when no area → move pos
-
-  const a = S.autoArea;
-  // Resize handle
-  if (Math.abs(mx - (a.x + a.w)) < 0.05 && Math.abs(my - (a.y + a.h)) < 0.05) return 'area-resize';
-  // Inside area → move
-  if (mx >= a.x && mx <= a.x + a.w && my >= a.y && my <= a.y + a.h) return 'area-move';
-  // Outside → draw new area
-  return 'area-draw';
-}
-
-$('#minimap-wrap').on('mousedown', function(e) {
-  const rect = mmCanvas.getBoundingClientRect();
-  const W = rect.width, H = rect.height;
-  const mx = (e.clientX - rect.left) / W;
-  const my = (e.clientY - rect.top) / H;
-
-  const hit = mmHitTest(mx, my);
-  mmStart = { mx, my };
-  mmAreaStart = S.autoArea ? { ...S.autoArea } : null;
-
-  if (hit === 'pos') {
-    mmMode = 'pos';
-  } else if (hit === 'pos-draw') {
-    mmMode = 'pos';
-    S.defaultPos = { x: Math.max(0, Math.min(1, mx)), y: Math.max(0, Math.min(1, my)) };
-    drawMinimap();
-  } else if (hit === 'area-resize') {
-    mmMode = 'area-resize';
-  } else if (hit === 'area-move') {
-    mmMode = 'area-move';
-  } else {
-    mmMode = 'area-draw';
-    S.autoArea = { x: mx, y: my, w: 0, h: 0 };
-    drawMinimap();
-  }
-  e.preventDefault();
-}).on('mousemove', function(e) {
-  if (!mmMode) return;
-  const rect = mmCanvas.getBoundingClientRect();
-  const W = rect.width, H = rect.height;
-  const mx = (e.clientX - rect.left) / W;
-  const my = (e.clientY - rect.top) / H;
-
-  if (mmMode === 'pos') {
-    S.defaultPos = { x: Math.max(0, Math.min(1, mx)), y: Math.max(0, Math.min(1, my)) };
-  } else if (mmMode === 'area-draw') {
-    const x = Math.min(mx, mmStart.mx);
-    const y = Math.min(my, mmStart.my);
-    S.autoArea = {
-      x: Math.max(0, x), y: Math.max(0, y),
-      w: Math.min(Math.abs(mx - mmStart.mx), 1 - Math.max(0, x)),
-      h: Math.min(Math.abs(my - mmStart.my), 1 - Math.max(0, y))
-    };
-  } else if (mmMode === 'area-move') {
-    const dx = mx - mmStart.mx, dy = my - mmStart.my;
-    S.autoArea = {
-      x: Math.max(0, Math.min(1 - mmAreaStart.w, mmAreaStart.x + dx)),
-      y: Math.max(0, Math.min(1 - mmAreaStart.h, mmAreaStart.y + dy)),
-      w: mmAreaStart.w, h: mmAreaStart.h
-    };
-  } else if (mmMode === 'area-resize') {
-    const dx = mx - mmStart.mx, dy = my - mmStart.my;
-    S.autoArea = {
-      x: mmAreaStart.x, y: mmAreaStart.y,
-      w: Math.max(0.05, Math.min(1 - mmAreaStart.x, mmAreaStart.w + dx)),
-      h: Math.max(0.05, Math.min(1 - mmAreaStart.y, mmAreaStart.h + dy))
-    };
-  }
-
-  drawMinimap();
-  if (S.pages.length) refreshStampOverlay();
-});
-
-$(document).on('mouseup', function() {
-  if (!mmMode) return;
-  if (mmMode === 'area-draw') {
-    // Too small → reset to default zone
-    if (S.autoArea.w < 0.05 || S.autoArea.h < 0.05) {
-      S.autoArea = { x: Math.max(0, mmStart.mx - 0.2), y: Math.max(0, mmStart.my - 0.15), w: 0.4, h: 0.3 };
-    }
-    // Snap defaultPos to center of new area
-    S.defaultPos = { x: S.autoArea.x + S.autoArea.w / 2, y: S.autoArea.y + S.autoArea.h / 2 };
-  }
-  mmMode = null;
-  drawMinimap();
-  scheduleSave();
-});
-
-let mmDragging = false; // kept for legacy mouseup compat
-
-drawMinimap();
-
-// ── File loading ──
-async function loadPDFs(files) {
-  const newFiles = Array.from(files).filter(f => f.name.endsWith('.pdf'));
-  if (!newFiles.length) return;
-
-  for (const file of newFiles) {
-    const ab = await file.arrayBuffer();
-    const pdfDoc = await pdfjsLib.getDocument({data: ab.slice(0)}).promise;
-    const entry = { name: file.name, arrayBuffer: ab, pdfDoc, pageCount: pdfDoc.numPages };
-    const fi = S.files.length;
-    S.files.push(entry);
-    for (let pg = 1; pg <= pdfDoc.numPages; pg++) {
-      S.pages.push({ fileIdx: fi, pageNum: pg });
-    }
-    renderFileItem(fi);
-  }
-
-  $('#empty-state').hide();
-  $pageWrap.show();
-  $('#btn-process').prop('disabled', false);
-  await goTo(S.cursor);
-  toast(`Loaded ${newFiles.length} file(s)`);
-}
-
-function renderFileItem(fi) {
-  const f = S.files[fi];
-  const $item = $(`
-    <div class="file-item" data-fi="${fi}">
-      <span class="fname" title="${f.name}">${f.name}</span>
-      <span class="pages">${f.pageCount}p</span>
-      <span class="remove" data-fi="${fi}" title="Remove">✕</span>
-    </div>`);
-  $fileList.append($item);
-}
-
-$fileList.on('click', '.file-item', function(e) {
-  if ($(e.target).hasClass('remove')) return;
-  const fi = +$(this).data('fi');
-  const idx = S.pages.findIndex(p => p.fileIdx === fi);
-  if (idx >= 0) goTo(idx);
-});
-
-$fileList.on('click', '.remove', function(e) {
-  e.stopPropagation();
-  const fi = +$(this).data('fi');
-  removeFile(fi);
-});
-
-function removeFile(fi) {
-  S.files[fi]._removed = true;
-  // Remove pages
-  S.pages = S.pages.filter(p => p.fileIdx !== fi);
-  // Clear cache and per-page position overrides for this file
-  Object.keys(S.renderCache).forEach(k => { if (k.startsWith(fi+':')) delete S.renderCache[k]; });
-  Object.keys(S.stampPositions).forEach(k => { if (k.startsWith(fi+':')) delete S.stampPositions[k]; });
-  $fileList.find(`[data-fi="${fi}"]`).remove();
-  if (!S.pages.length) {
-    $('#empty-state').show(); $pageWrap.hide();
-    $('#btn-process').prop('disabled', true);
-    $navPrev.addClass('hidden'); $navNext.addClass('hidden');
-    $navInfo.text('no documents loaded');
-    return;
-  }
-  S.cursor = Math.min(S.cursor, S.pages.length - 1);
-  goTo(S.cursor);
-}
-
-$('#pdf-input').on('change', function() { loadPDFs(this.files); this.value=''; });
-$('#drop-zone').on('dragover', function(e) { e.preventDefault(); $(this).addClass('drag-over'); })
-               .on('dragleave', function() { $(this).removeClass('drag-over'); })
-               .on('drop', function(e) {
-                 e.preventDefault(); $(this).removeClass('drag-over');
-                 loadPDFs(e.originalEvent.dataTransfer.files);
-               });
-
-// ── Stamp loading ──
-async function loadStampFromImage(img) {
-  const bmp = await createImageBitmap(img);
-  S.stamp = bmp;
-  const cvs = document.createElement('canvas');
-  cvs.width = bmp.width; cvs.height = bmp.height;
-  cvs.getContext('2d').drawImage(bmp, 0, 0);
-  S.stampDataURL = cvs.toDataURL('image/png');
-  const thumb = document.getElementById('stamp-preview-thumb');
-  thumb.src = S.stampDataURL;
-  thumb.style.display = 'block';
-  $('#stamp-placeholder').hide();
-  drawMinimap();
-  refreshStampOverlay();
-  scheduleSave();
-}
-
-async function loadStampFile(file) {
-  if (!file || !file.type.startsWith('image/')) return;
-  const bmp = await createImageBitmap(file);
-  S.stamp = bmp;
-  const cvs = document.createElement('canvas');
-  cvs.width = bmp.width; cvs.height = bmp.height;
-  cvs.getContext('2d').drawImage(bmp, 0, 0);
-  S.stampDataURL = cvs.toDataURL('image/png');
-  const thumb = document.getElementById('stamp-preview-thumb');
-  thumb.src = S.stampDataURL;
-  thumb.style.display = 'block';
-  $('#stamp-placeholder').hide();
-  drawMinimap();
-  refreshStampOverlay();
-  scheduleSave();
-}
-
-$('#stamp-input').on('change', function() { if (this.files[0]) loadStampFile(this.files[0]); this.value=''; });
-$('#stamp-drop').on('dragover', e => { e.preventDefault(); $('#stamp-drop').css('borderColor','var(--accent)'); })
-               .on('dragleave', () => $('#stamp-drop').css('borderColor',''))
-               .on('drop', function(e) {
-                 e.preventDefault(); $(this).css('borderColor','');
-                 const f = e.originalEvent.dataTransfer.files[0];
-                 if (f) loadStampFile(f);
-               });
-
-// Paste stamp from clipboard
-document.addEventListener('paste', async (e) => {
-  const items = e.clipboardData.items;
-  for (const item of items) {
-    if (item.type.startsWith('image/')) {
-      const file = item.getAsFile();
-      await loadStampFile(file);
-      toast('Stamp pasted from clipboard');
-      return;
-    }
-  }
-});
-
-// ── Rendering ──
-async function renderPage(fi, pg, targetW) {
-  const key = pageKey(fi, pg);
-  if (S.renderCache[key]) return S.renderCache[key];
-
-  const pdfDoc = S.files[fi].pdfDoc;
-  const page = await pdfDoc.getPage(pg);
-  const vp0 = page.getViewport({ scale: 1 });
-  const scale = targetW / vp0.width;
-  const vp = page.getViewport({ scale });
-
-  const cvs = new OffscreenCanvas(vp.width, vp.height);
-  const ctx = cvs.getContext('2d');
-  await page.render({ canvasContext: ctx, viewport: vp }).promise;
-  const bmp = await createImageBitmap(cvs);
-  S.renderCache[key] = bmp;
-  return bmp;
-}
-
-function getTargetWidth() {
-  const areaW = $canvasArea.width() - 80;
-  const areaH = $canvasArea.height() - 40;
-  // A4 aspect ~1.414; clamp to fit area
-  return Math.min(areaW, Math.round(areaH / 1.414));
-}
-
-async function goTo(idx) {
-  if (!S.pages.length) return;
-  idx = Math.max(0, Math.min(S.pages.length - 1, idx));
-  S.cursor = idx;
-
-  const { fileIdx: fi, pageNum: pg } = S.pages[idx];
-  const targetW = getTargetWidth();
-  const bmp = await renderPage(fi, pg, targetW);
-
-  // Draw to main canvas
-  $pageCanvas.width = bmp.width;
-  $pageCanvas.height = bmp.height;
-  $pageCanvas.getContext('2d').drawImage(bmp, 0, 0);
-
-  $pageWrap.css({ width: bmp.width, height: bmp.height });
-
-  // Stamp overlay canvas
-  $stampOver.width = bmp.width;
-  $stampOver.height = bmp.height;
-  $stampOver.style.width = bmp.width + 'px';
-  $stampOver.style.height = bmp.height + 'px';
-  $stampOver.style.display = 'block';
-
-  refreshStampOverlay();
-  updateNav();
-
-  // Prefetch neighbors
-  prefetch(fi, pg - 1); prefetch(fi, pg + 1);
-}
-
-function prefetch(fi, pg) {
-  if (pg < 1 || pg > S.files[fi]?.pageCount) return;
-  if (!S.renderCache[pageKey(fi, pg)]) {
-    renderPage(fi, pg, getTargetWidth());
-  }
-}
-
-// ── Stamp overlay ──
-function getStampRect() {
-  if (!S.stamp) return null;
-  const W = $pageCanvas.width, H = $pageCanvas.height;
-  const sw = W * S.stampSize;
-  const sh = sw * (S.stamp.height / S.stamp.width);
-
-  const key = pageKey(S.pages[S.cursor]?.fileIdx, S.pages[S.cursor]?.pageNum);
-  let pos;
-  if (S.stampPositions[key]) {
-    // Stored as normalized fractions — convert to canvas pixels
-    pos = { x: S.stampPositions[key].x * W, y: S.stampPositions[key].y * H };
-  } else if (S.autoPlace) {
-    pos = computeAutoPos(W, H, sw, sh);
-  } else {
-    pos = { x: S.defaultPos.x * W, y: S.defaultPos.y * H };
-  }
-
-  // Clamp
-  const x = Math.max(0, Math.min(W - sw, pos.x));
-  const y = Math.max(0, Math.min(H - sh, pos.y));
-  return { x, y, w: sw, h: sh };
-}
-
-function computeAutoPos(W, H, sw, sh) {
-  const ctx = $pageCanvas.getContext('2d');
-
-  // Search bounds come from the user-drawn area on the minimap.
-  // Fall back to an 8% margin inset if area is degenerate.
-  const a = S.autoArea;
-  const margin = 0.08;
-  const x0 = Math.floor(Math.max(W * margin, a.x * W));
-  const y0 = Math.floor(Math.max(H * margin, a.y * H));
-  const x1 = Math.floor(Math.min(W * (1 - margin), (a.x + a.w) * W)) - Math.ceil(sw);
-  const y1 = Math.floor(Math.min(H * (1 - margin), (a.y + a.h) * H)) - Math.ceil(sh);
-
-  if (x1 <= x0 || y1 <= y0) {
-    // Area too small for stamp — fall back to defaultPos
-    return { x: Math.max(0, Math.min(W - sw, S.defaultPos.x * W)), y: Math.max(0, Math.min(H - sh, S.defaultPos.y * H)) };
-  }
-
-  const iw = Math.ceil(sw), ih = Math.ceil(sh);
-
-  // ── Build score map once from full page ImageData ──
-  const full = ctx.getImageData(0, 0, W, H).data;
-
-  const gray  = new Float32Array(W * H);
-  const edges = new Float32Array(W * H);
-
-  for (let i = 0; i < W * H; i++) {
-    gray[i] = (full[i*4]*77 + full[i*4+1]*150 + full[i*4+2]*29) / (255 * 256);
-  }
-
-  for (let y = 1; y < H - 1; y++) {
-    for (let x = 1; x < W - 1; x++) {
-      const gx =
-        -gray[(y-1)*W+(x-1)] + gray[(y-1)*W+(x+1)]
-        -2*gray[y*W+(x-1)]   + 2*gray[y*W+(x+1)]
-        -gray[(y+1)*W+(x-1)] + gray[(y+1)*W+(x+1)];
-      const gy =
-        -gray[(y-1)*W+(x-1)] - 2*gray[(y-1)*W+x] - gray[(y-1)*W+(x+1)]
-        +gray[(y+1)*W+(x-1)] + 2*gray[(y+1)*W+x] + gray[(y+1)*W+(x+1)];
-      edges[y*W+x] = Math.min(1, Math.sqrt(gx*gx + gy*gy));
-    }
-  }
-
-  // Blur radius = 1/3 of the smaller stamp dimension so edge "danger zones"
-  // spread far enough to actually separate lines of text from empty blocks.
-  const blurR = Math.max(12, Math.floor(Math.min(iw, ih) / 3));
-  const tmp = new Float32Array(W * H);
-  for (let y = 0; y < H; y++) {
-    let s = 0;
-    for (let x = 0; x < blurR*2+1; x++) s += edges[y*W + Math.min(x, W-1)];
-    for (let x = 0; x < W; x++) {
-      tmp[y*W+x] = s / (blurR*2+1);
-      s += edges[y*W + Math.min(x+blurR+1, W-1)] - edges[y*W + Math.max(x-blurR, 0)];
-    }
-  }
-  const edgeBlur = new Float32Array(W * H);
-  for (let x = 0; x < W; x++) {
-    let s = 0;
-    for (let y = 0; y < blurR*2+1; y++) s += tmp[Math.min(y, H-1)*W+x];
-    for (let y = 0; y < H; y++) {
-      edgeBlur[y*W+x] = s / (blurR*2+1);
-      s += tmp[Math.min(y+blurR+1, H-1)*W+x] - tmp[Math.max(y-blurR, 0)*W+x];
-    }
-  }
-
-  // Score: brightness heavily weighted, edge presence harshly penalised.
-  // b^2 rewards truly white areas; (1-e)^4 makes any edge density collapse score fast.
-  const score = new Float32Array(W * H);
-  for (let i = 0; i < W * H; i++) {
-    const b = gray[i], e = edgeBlur[i];
-    score[i] = b * b * Math.pow(1 - e, 4);
-  }
-
-  // Integral image
-  const integ = new Float64Array(W * H);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const i = y*W+x;
-      integ[i] = score[i]
-        + (x > 0 ? integ[i-1] : 0)
-        + (y > 0 ? integ[i-W] : 0)
-        - (x > 0 && y > 0 ? integ[i-W-1] : 0);
-    }
-  }
-
-  function winMean(x, y) {
-    const x2 = Math.min(x + iw - 1, W - 1);
-    const y2 = Math.min(y + ih - 1, H - 1);
-    const cx = x2 - iw + 1, cy = y2 - ih + 1;
-    let s = integ[y2*W+x2];
-    if (cx > 0) s -= integ[y2*W+cx-1];
-    if (cy > 0) s -= integ[(cy-1)*W+x2];
-    if (cx > 0 && cy > 0) s += integ[(cy-1)*W+cx-1];
-    return s / (iw * ih);
-  }
-
-  // ── Outward ring search from defaultPos ──
-  // Step = 1/4 stamp size. Never exit early on a threshold — instead keep
-  // expanding until 3 full rings pass with no improvement.
-  const step = Math.max(2, Math.floor(Math.min(iw, ih) / 4));
-
-  const gridXs = [], gridYs = [];
-  for (let x = x0; x <= x1; x += step) gridXs.push(x);
-  for (let y = y0; y <= y1; y += step) gridYs.push(y);
-  if (!gridXs.length || !gridYs.length) return { x: Math.max(0, W-mx-sw), y: Math.max(0, H-my-sh) };
-
-  const targetX = Math.max(x0, Math.min(x1, Math.round(S.defaultPos.x * W - iw / 2)));
-  const targetY = Math.max(y0, Math.min(y1, Math.round(S.defaultPos.y * H - ih / 2)));
-  const gox = gridXs.reduce((bi, v, i) => Math.abs(v - targetX) < Math.abs(gridXs[bi] - targetX) ? i : bi, 0);
-  const goy = gridYs.reduce((bi, v, i) => Math.abs(v - targetY) < Math.abs(gridYs[bi] - targetY) ? i : bi, 0);
-
-  const gW = gridXs.length, gH = gridYs.length;
-  const maxRing = Math.max(gW, gH);
-
-  let bx = gridXs[gox], by = gridYs[goy], best = winMean(bx, by);
-  let ringsSinceImprovement = 0;
-
-  for (let r = 1; r <= maxRing; r++) {
-    let improved = false;
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dy = -r; dy <= r; dy++) {
-        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-        const gi = gox + dx, gj = goy + dy;
-        if (gi < 0 || gj < 0 || gi >= gW || gj >= gH) continue;
-        const s = winMean(gridXs[gi], gridYs[gj]);
-        if (s > best) { best = s; bx = gridXs[gi]; by = gridYs[gj]; improved = true; }
-      }
-    }
-    if (improved) { ringsSinceImprovement = 0; }
-    else if (++ringsSinceImprovement >= 3) break;
-  }
-
-  return { x: bx, y: by };
-}
-
-function refreshStampOverlay() {
-  if (!S.stamp || !S.pages.length) {
-    $stampOver.style.display = 'none';
-    $dragHandle.style.display = 'none';
-    return;
-  }
-
-  const rect = getStampRect();
-  if (!rect) return;
-
-  const ctx = $stampOver.getContext('2d');
-  ctx.clearRect(0, 0, $stampOver.width, $stampOver.height);
-  ctx.globalAlpha = S.stampOpacity;
-  ctx.drawImage(S.stamp, rect.x, rect.y, rect.w, rect.h);
-  ctx.globalAlpha = 1;
-
-  // Drag handle
-  $($dragHandle).css({
-    left: rect.x + 'px', top: rect.y + 'px',
-    width: rect.w + 'px', height: rect.h + 'px',
-    display: 'block'
-  });
-
-  const key = pageKey(S.pages[S.cursor]?.fileIdx, S.pages[S.cursor]?.pageNum);
-  if (S.stampPositions[key]) {
-    $dragHandle.classList.add('pinned');
-  } else {
-    $dragHandle.classList.remove('pinned');
-  }
-}
-
-// ── Drag handle ──
-$($dragHandle).on('mousedown', function(e) {
-  e.preventDefault();
-  S.dragging = true;
-  const hr = $dragHandle.getBoundingClientRect();
-  S.dragOffX = e.clientX - hr.left;
-  S.dragOffY = e.clientY - hr.top;
-});
-
-$(document).on('mousemove', function(e) {
-  if (!S.dragging) return;
-  const pr = $pageWrap[0].getBoundingClientRect();
-  const W = $pageCanvas.width, H = $pageCanvas.height;
-  const scaleX = W / pr.width;
-  const scaleY = H / pr.height;
-
-  const rect = getStampRect();
-  let nx = (e.clientX - pr.left - S.dragOffX) * scaleX;
-  let ny = (e.clientY - pr.top - S.dragOffY) * scaleY;
-  nx = Math.max(0, Math.min(W - rect.w, nx));
-  ny = Math.max(0, Math.min(H - rect.h, ny));
-
-  const key = pageKey(S.pages[S.cursor]?.fileIdx, S.pages[S.cursor]?.pageNum);
-  // Store as normalized fractions so export is resolution-independent
-  S.stampPositions[key] = { x: nx / W, y: ny / H };
-  refreshStampOverlay();
-});
-
-$(document).on('mouseup', function() {
-  if (S.dragging) { S.dragging = false; scheduleSave(); }
-});
-
-// Double-click to reset position
-$($dragHandle).on('dblclick', function() {
-  const key = pageKey(S.pages[S.cursor]?.fileIdx, S.pages[S.cursor]?.pageNum);
-  delete S.stampPositions[key];
-  refreshStampOverlay();
-  toast('Position reset');
-});
-
-// ── Navigation ──
-function updateNav() {
-  const total = S.pages.length;
-  $navPrev.toggleClass('hidden', S.cursor === 0);
-  $navNext.toggleClass('hidden', S.cursor === total - 1);
-  $('#progress-fill').css('width', (total > 1 ? S.cursor/(total-1)*100 : 100) + '%');
-
-  const { fileIdx: fi, pageNum: pg } = S.pages[S.cursor];
-  const fname = S.files[fi].name.replace(/\.pdf$/i,'');
-  $navInfo.text(`${fname} · p${pg}/${S.files[fi].pageCount} · ${S.cursor+1}/${total}`);
-  $fileList.find('.file-item').removeClass('active');
-  $fileList.find(`[data-fi="${fi}"]`).addClass('active');
-}
-
-$navPrev.on('click', () => goTo(S.cursor - 1));
-$navNext.on('click', () => goTo(S.cursor + 1));
-
-$canvasArea.on('keydown', function(e) {
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); goTo(S.cursor + 1); }
-  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); goTo(S.cursor - 1); }
-});
-
-// Scroll to switch pages — attach to document so it works regardless of focus/hover target.
-// Only fire when the pointer is over the canvas area, not the sidebar.
-document.addEventListener('wheel', function(e) {
-  const sidebar = document.getElementById('sidebar');
-  if (sidebar && sidebar.contains(e.target)) return; // scrolling sidebar lists
-  if (!S.pages.length) return;
-  e.preventDefault();
-  goTo(S.cursor + (e.deltaY > 0 ? 1 : -1));
-}, { passive: false });
-
-$canvasArea.on('click', function() { $(this).focus(); });
-
-// ── Custom sliders ──
-function makeSlider(trackId, fillId, thumbId, valId, min, max, init, onchange) {
-  const track = document.getElementById(trackId);
-  const fill  = document.getElementById(fillId);
-  const thumb = document.getElementById(thumbId);
-  const val   = document.getElementById(valId);
-  let dragging = false;
-
-  function pct(v) { return (v - min) / (max - min); }
-  function fromPct(p) { return Math.round(min + p * (max - min)); }
-
-  function set(v, silent) {
-    v = Math.max(min, Math.min(max, v));
-    const p = pct(v) * 100;
-    fill.style.width  = p + '%';
-    thumb.style.left  = p + '%';
-    val.textContent   = v + '%';
-    if (!silent) onchange(v);
-  }
-
-  function posToVal(e) {
-    const r = track.getBoundingClientRect();
-    return fromPct(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
-  }
-
-  track.addEventListener('mousedown', e => {
-    dragging = true;
-    thumb.classList.add('dragging');
-    set(posToVal(e));
-    e.preventDefault();
-  });
-  document.addEventListener('mousemove', e => { if (dragging) set(posToVal(e)); });
-  document.addEventListener('mouseup', () => {
-    if (dragging) { dragging = false; thumb.classList.remove('dragging'); scheduleSave(); }
-  });
-
-  set(init, true);
-  return { set };
-}
-
-const sizeSlider    = makeSlider('size-track',    'size-fill',    'size-thumb',    'size-val',    5,  60, 20,  v => { S.stampSize    = v / 100; drawMinimap(); refreshStampOverlay(); });
-const opacitySlider = makeSlider('opacity-track', 'opacity-fill', 'opacity-thumb', 'opacity-val', 10, 100, 85, v => { S.stampOpacity = v / 100; refreshStampOverlay(); });
-
-$('#auto-place').on('change', function() {
-  S.autoPlace = this.checked;
-  drawMinimap();
-  refreshStampOverlay();
-  scheduleSave();
-});
-
-// ── Export ──
-$('#btn-process').on('click', async function() {
-  if (!S.pages.length || !S.stamp) { toast('Load PDFs and a stamp first'); return; }
-
-  $('#proc-overlay').addClass('show');
-
-  // Group pages by file
-  const fileIndices = [...new Set(S.pages.map(p => p.fileIdx))];
-
-  for (let fi = 0; fi < fileIndices.length; fi++) {
-    const fileIdx = fileIndices[fi];
-    const f = S.files[fileIdx];
-    $('#proc-label').text(`Processing: ${f.name}`);
-    $('#proc-bar').css('width', (fi / fileIndices.length * 100) + '%');
-
-    // Re-open PDF with fflate (PDF.js can't write; use a canvas+blob approach)
-    // We render each page to a canvas, composite stamp, then use jsPDF
-    // But for proper PDF output we use a download of flattened images per page
-    // wrapped in a simple PDF structure via manual assembly
-    await exportFileToPDF(fileIdx, fi, fileIndices.length);
-  }
-
-  $('#proc-bar').css('width', '100%');
-  setTimeout(() => $('#proc-overlay').removeClass('show'), 400);
-  toast('Export complete!');
-});
-
-async function exportFileToPDF(fi, fiOrder, total) {
-  const f = S.files[fi];
-
-  // ── Compute stamp position for each page at PDF-point resolution ──
-  // We need positions as fractions (0..1) of page size, then scale to PDF points.
-  // For auto-placed pages we run the scoring on a high-res offscreen render.
-  const stampFractions = {}; // pg → {fx, fy} normalised top-left
-
-  if (S.stamp) {
-    for (let pg = 1; pg <= f.pageCount; pg++) {
-      $('#proc-label').text(`analysing ${f.name} · page ${pg}/${f.pageCount}`);
-      const key = pageKey(fi, pg);
-      if (S.stampPositions[key]) {
-        // User manually placed — stored as pixel coords relative to preview canvas.
-        // We stored them as fractions already when dragging.
-        stampFractions[pg] = S.stampPositions[key]; // already {x,y} 0..1
-      } else if (S.autoPlace) {
-        // Run auto-placement on a high-res render of this page
-        const bmp = await renderPage(fi, pg, 1240);
-        const cvs = new OffscreenCanvas(bmp.width, bmp.height);
-        const ctx = cvs.getContext('2d');
-        ctx.drawImage(bmp, 0, 0);
-        const W = bmp.width, H = bmp.height;
-        const sw = W * S.stampSize;
-        const sh = sw * (S.stamp.height / S.stamp.width);
-        const pos = computeAutoPosFromCanvas(ctx, W, H, sw, sh);
-        stampFractions[pg] = { x: pos.x / W, y: pos.y / H };
-      } else {
-        stampFractions[pg] = { x: S.defaultPos.x, y: S.defaultPos.y };
-      }
-    }
-  }
-
-  // ── Load original PDF bytes into pdf-lib ──
-  $('#proc-label').text(`embedding stamp · ${f.name}`);
-  const { PDFDocument, degrees } = PDFLib;
-  const pdfDoc = await PDFDocument.load(f.arrayBuffer, { ignoreEncryption: true });
-  const pages = pdfDoc.getPages();
-
-  if (S.stamp && S.stampDataURL) {
-    // Embed stamp image once
-    let stampImage;
-    const dataUrl = S.stampDataURL;
-    const base64 = dataUrl.split(',')[1];
-    const mime = dataUrl.split(';')[0].split(':')[1];
-    if (mime === 'image/png') {
-      stampImage = await pdfDoc.embedPng(Uint8Array.from(atob(base64), c => c.charCodeAt(0)));
-    } else {
-      stampImage = await pdfDoc.embedJpg(Uint8Array.from(atob(base64), c => c.charCodeAt(0)));
-    }
-
-    for (let i = 0; i < pages.length; i++) {
-      const pg = i + 1;
-      const page = pages[i];
-
-      // pdf-lib getSize() returns visual (post-rotation) dimensions.
-      // drawImage() however operates in raw PDF coordinate space (pre-rotation).
-      // We must transform the visual-space position to raw coords AND pre-rotate
-      // the stamp by -R so the viewer's /Rotate cancels it out.
-      const rotation = page.getRotation().angle; // 0 | 90 | 180 | 270 (CCW)
-      const { width: vW, height: vH } = page.getSize(); // visual dims
-      const mW = (rotation === 90 || rotation === 270) ? vH : vW; // raw MediaBox width
-      const mH = (rotation === 90 || rotation === 270) ? vW : vH; // raw MediaBox height
-
-      // Stamp size expressed in visual space (what the user sees)
-      const vStampW = vW * S.stampSize;
-      const vStampH = vStampW * (S.stamp.height / S.stamp.width);
-
-      const frac = stampFractions[pg] || { x: S.defaultPos.x, y: S.defaultPos.y };
-      // Clamp so stamp stays within the visual page
-      const fx = Math.max(0, Math.min(1 - vStampW / vW, frac.x));
-      const fy = Math.max(0, Math.min(1 - vStampH / vH, frac.y));
-
-      // Map visual top-left fraction (fx, fy) → raw PDF bottom-left anchor (rx, ry)
-      // for each /Rotate value, together with the counter-rotation angle so the
-      // stamp image appears upright after the viewer applies /Rotate.
-      let rx, ry, counterRot;
-      if (rotation === 90) {
-        // Visual dims: vW=mH, vH=mW  |  screen: x=mH-raw_y, y=mW-raw_x
-        rx = (1 - fy) * mW - vStampH;
-        ry = (1 - fx) * mH;
-        counterRot = 270;
-      } else if (rotation === 180) {
-        // Visual dims: vW=mW, vH=mH  |  screen: x=mW-raw_x, y=raw_y
-        rx = (1 - fx) * mW;
-        ry = fy * mH + vStampH;
-        counterRot = 180;
-      } else if (rotation === 270) {
-        // Visual dims: vW=mH, vH=mW  |  screen: x=raw_y, y=raw_x
-        rx = fy * mW + vStampH;
-        ry = fx * mH;
-        counterRot = 90;
-      } else {
-        // rotation === 0: standard — PDF Y is bottom-up, canvas Y is top-down
-        rx = fx * mW;
-        ry = (1 - fy) * mH - vStampH;
-        counterRot = 0;
-      }
-
-      page.drawImage(stampImage, {
-        x: rx,
-        y: ry,
-        width: vStampW,
-        height: vStampH,
-        rotate: degrees(counterRot),
-        opacity: S.stampOpacity,
-      });
-
-      const progress = (fiOrder + (pg / f.pageCount)) / total * 100;
-      $('#proc-bar').css('width', progress + '%');
-    }
-  }
-
-  const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = f.name.replace(/\.pdf$/i, '_stamped.pdf');
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
-
-// ── Autosave / restore ──
-const SAVE_KEY = 'stampforge_state';
-
-function saveState() {
-  try {
-    const data = {
-      stampDataURL: S.stampDataURL || null,
-      stampSize: S.stampSize,
-      stampOpacity: S.stampOpacity,
-      defaultPos: S.defaultPos,
-      autoArea: S.autoArea,
-      autoPlace: S.autoPlace,
-    };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-  } catch(e) { /* storage full or unavailable */ }
-}
-
-function restoreState() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    if (data.stampSize != null)    { S.stampSize    = data.stampSize;    sizeSlider.set(Math.round(data.stampSize * 100), true); drawMinimap(); }
-    if (data.stampOpacity != null) { S.stampOpacity = data.stampOpacity; opacitySlider.set(Math.round(data.stampOpacity * 100), true); }
-    if (data.defaultPos)           { S.defaultPos   = data.defaultPos;   drawMinimap(); }
-    if (data.autoArea)             { S.autoArea     = data.autoArea;     drawMinimap(); }
-    if (data.autoPlace !== undefined) {
-      S.autoPlace = data.autoPlace;
-      $('#auto-place').prop('checked', data.autoPlace);
-      drawMinimap();
-    }
-    if (data.stampDataURL) {
-      S.stampDataURL = data.stampDataURL;
-      const img = new Image();
-      img.onload = async () => {
-        S.stamp = await createImageBitmap(img);
-        const thumb = document.getElementById('stamp-preview-thumb');
-        thumb.src = data.stampDataURL;
-        thumb.style.display = 'block';
-        $('#stamp-placeholder').hide();
-        drawMinimap();
-        refreshStampOverlay();
-        toast('session restored');
-      };
-      img.src = data.stampDataURL;
-    }
-  } catch(e) { /* corrupt data */ }
-}
-
-let saveTimer;
-function scheduleSave() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveState, 5000);
-}
-
-function computeAutoPosFromCanvas(ctx, W, H, sw, sh) {
-  // Same integral-image + outward-ring algorithm as computeAutoPos,
-  // but works from an arbitrary ctx (used during export rendering).
-  const margin = 0.08;
-  const mx = Math.floor(W * margin), my = Math.floor(H * margin);
-  const x0 = mx, x1 = W - mx - Math.ceil(sw);
-  const y0 = my, y1 = H - my - Math.ceil(sh);
-  if (x1 <= x0 || y1 <= y0) return { x: Math.max(0, W - mx - sw), y: Math.max(0, H - my - sh) };
-
-  const iw = Math.ceil(sw), ih = Math.ceil(sh);
-  const full = ctx.getImageData(0, 0, W, H).data;
-
-  const gray  = new Float32Array(W * H);
-  const edges = new Float32Array(W * H);
-  for (let i = 0; i < W * H; i++) {
-    gray[i] = (full[i*4]*77 + full[i*4+1]*150 + full[i*4+2]*29) / (255 * 256);
-  }
-  for (let y = 1; y < H - 1; y++) {
-    for (let x = 1; x < W - 1; x++) {
-      const gx = -gray[(y-1)*W+(x-1)] + gray[(y-1)*W+(x+1)] - 2*gray[y*W+(x-1)] + 2*gray[y*W+(x+1)] - gray[(y+1)*W+(x-1)] + gray[(y+1)*W+(x+1)];
-      const gy = -gray[(y-1)*W+(x-1)] - 2*gray[(y-1)*W+x] - gray[(y-1)*W+(x+1)] + gray[(y+1)*W+(x-1)] + 2*gray[(y+1)*W+x] + gray[(y+1)*W+(x+1)];
-      edges[y*W+x] = Math.min(1, Math.sqrt(gx*gx + gy*gy));
-    }
-  }
-  const blurR = Math.max(12, Math.floor(Math.min(iw, ih) / 3));
-  const tmp = new Float32Array(W * H);
-  for (let y = 0; y < H; y++) {
-    let s = 0;
-    for (let x = 0; x < blurR*2+1; x++) s += edges[y*W + Math.min(x, W-1)];
-    for (let x = 0; x < W; x++) { tmp[y*W+x] = s/(blurR*2+1); s += edges[y*W+Math.min(x+blurR+1,W-1)] - edges[y*W+Math.max(x-blurR,0)]; }
-  }
-  const edgeBlur = new Float32Array(W * H);
-  const score = new Float32Array(W * H);
-  for (let x = 0; x < W; x++) {
-    let s = 0;
-    for (let y = 0; y < blurR*2+1; y++) s += tmp[Math.min(y,H-1)*W+x];
-    for (let y = 0; y < H; y++) {
-      edgeBlur[y*W+x] = s/(blurR*2+1);
-      const b = gray[y*W+x], e = edgeBlur[y*W+x];
-      score[y*W+x] = b * b * Math.pow(1 - e, 4);
-      s += tmp[Math.min(y+blurR+1,H-1)*W+x] - tmp[Math.max(y-blurR,0)*W+x];
-    }
-  }
-  const integ = new Float64Array(W * H);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const i = y*W+x;
-      integ[i] = score[i] + (x>0?integ[i-1]:0) + (y>0?integ[i-W]:0) - (x>0&&y>0?integ[i-W-1]:0);
-    }
-  }
-  function winMean(x, y) {
-    const x2 = Math.min(x+iw-1, W-1), y2 = Math.min(y+ih-1, H-1);
-    const cx = x2-iw+1, cy = y2-ih+1;
-    let s = integ[y2*W+x2];
-    if (cx>0) s -= integ[y2*W+cx-1];
-    if (cy>0) s -= integ[(cy-1)*W+x2];
-    if (cx>0&&cy>0) s += integ[(cy-1)*W+cx-1];
-    return s/(iw*ih);
-  }
-
-  const step = Math.max(2, Math.floor(Math.min(iw, ih) / 4));
-  const gridXs = [], gridYs = [];
-  for (let x = x0; x <= x1; x += step) gridXs.push(x);
-  for (let y = y0; y <= y1; y += step) gridYs.push(y);
-  if (!gridXs.length || !gridYs.length) return { x: Math.max(0, W-mx-sw), y: Math.max(0, H-my-sh) };
-
-  const targetX = Math.max(x0, Math.min(x1, Math.round(S.defaultPos.x * W - iw/2)));
-  const targetY = Math.max(y0, Math.min(y1, Math.round(S.defaultPos.y * H - ih/2)));
-  const gox = gridXs.reduce((bi,v,i) => Math.abs(v-targetX)<Math.abs(gridXs[bi]-targetX)?i:bi, 0);
-  const goy = gridYs.reduce((bi,v,i) => Math.abs(v-targetY)<Math.abs(gridYs[bi]-targetY)?i:bi, 0);
-  const gW = gridXs.length, gH = gridYs.length;
-  const maxRing = Math.max(gW, gH);
-
-  let bx = gridXs[gox], by = gridYs[goy], best = winMean(bx, by);
-  let ringsSinceImprovement = 0;
-
-  for (let r = 1; r <= maxRing; r++) {
-    let improved = false;
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dy = -r; dy <= r; dy++) {
-        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-        const gi = gox+dx, gj = goy+dy;
-        if (gi<0||gj<0||gi>=gW||gj>=gH) continue;
-        const s = winMean(gridXs[gi], gridYs[gj]);
-        if (s > best) { best = s; bx = gridXs[gi]; by = gridYs[gj]; improved = true; }
-      }
-    }
-    if (improved) ringsSinceImprovement = 0;
-    else if (++ringsSinceImprovement >= 3) break;
-  }
-  return { x: bx, y: by };
-}
-
-// ── Window resize ──
-$(window).on('resize', () => {
-  if (S.pages.length) goTo(S.cursor);
-});
-
-// Focus canvas area on load
-$canvasArea.focus();
-
-// Restore previous session
-restoreState();
-</script>
 </body>
 </html>
