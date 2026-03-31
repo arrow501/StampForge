@@ -1317,7 +1317,7 @@ async function exportFileToPDF(fi, fiOrder, total) {
 
   // ── Load original PDF bytes into pdf-lib ──
   $('#proc-label').text(`embedding stamp · ${f.name}`);
-  const { PDFDocument } = PDFLib;
+  const { PDFDocument, degrees } = PDFLib;
   const pdfDoc = await PDFDocument.load(f.arrayBuffer, { ignoreEncryption: true });
   const pages = pdfDoc.getPages();
 
@@ -1336,21 +1336,57 @@ async function exportFileToPDF(fi, fiOrder, total) {
     for (let i = 0; i < pages.length; i++) {
       const pg = i + 1;
       const page = pages[i];
-      const { width: pW, height: pH } = page.getSize();
 
-      const stampW = pW * S.stampSize;
-      const stampH = stampW * (S.stamp.height / S.stamp.width);
+      // pdf-lib getSize() returns visual (post-rotation) dimensions.
+      // drawImage() however operates in raw PDF coordinate space (pre-rotation).
+      // We must transform the visual-space position to raw coords AND pre-rotate
+      // the stamp by -R so the viewer's /Rotate cancels it out.
+      const rotation = page.getRotation().angle; // 0 | 90 | 180 | 270 (CCW)
+      const { width: vW, height: vH } = page.getSize(); // visual dims
+      const mW = (rotation === 90 || rotation === 270) ? vH : vW; // raw MediaBox width
+      const mH = (rotation === 90 || rotation === 270) ? vW : vH; // raw MediaBox height
+
+      // Stamp size expressed in visual space (what the user sees)
+      const vStampW = vW * S.stampSize;
+      const vStampH = vStampW * (S.stamp.height / S.stamp.width);
 
       const frac = stampFractions[pg] || { x: S.defaultPos.x, y: S.defaultPos.y };
-      const px = frac.x * pW;
-      // PDF Y origin is bottom-left; canvas Y is top-left → flip
-      const py = pH - (frac.y * pH) - stampH;
+      // Clamp so stamp stays within the visual page
+      const fx = Math.max(0, Math.min(1 - vStampW / vW, frac.x));
+      const fy = Math.max(0, Math.min(1 - vStampH / vH, frac.y));
+
+      // Map visual top-left fraction (fx, fy) → raw PDF bottom-left anchor (rx, ry)
+      // for each /Rotate value, together with the counter-rotation angle so the
+      // stamp image appears upright after the viewer applies /Rotate.
+      let rx, ry, counterRot;
+      if (rotation === 90) {
+        // Visual dims: vW=mH, vH=mW  |  screen: x=mH-raw_y, y=mW-raw_x
+        rx = (1 - fy) * mW - vStampH;
+        ry = (1 - fx) * mH;
+        counterRot = 270;
+      } else if (rotation === 180) {
+        // Visual dims: vW=mW, vH=mH  |  screen: x=mW-raw_x, y=raw_y
+        rx = (1 - fx) * mW;
+        ry = fy * mH + vStampH;
+        counterRot = 180;
+      } else if (rotation === 270) {
+        // Visual dims: vW=mH, vH=mW  |  screen: x=raw_y, y=raw_x
+        rx = fy * mW + vStampH;
+        ry = fx * mH;
+        counterRot = 90;
+      } else {
+        // rotation === 0: standard — PDF Y is bottom-up, canvas Y is top-down
+        rx = fx * mW;
+        ry = (1 - fy) * mH - vStampH;
+        counterRot = 0;
+      }
 
       page.drawImage(stampImage, {
-        x: Math.max(0, Math.min(pW - stampW, px)),
-        y: Math.max(0, Math.min(pH - stampH, py)),
-        width: stampW,
-        height: stampH,
+        x: rx,
+        y: ry,
+        width: vStampW,
+        height: vStampH,
+        rotate: degrees(counterRot),
         opacity: S.stampOpacity,
       });
 
