@@ -1360,20 +1360,20 @@ async function exportFileToPDF(fi, fiOrder, total) {
       // stamp image appears upright after the viewer applies /Rotate.
       let rx, ry, counterRot;
       if (rotation === 90) {
-        // Visual dims: vW=mH, vH=mW  |  screen: x=mH-raw_y, y=mW-raw_x
-        rx = (1 - fy) * mW - vStampH;
-        ry = (1 - fx) * mH;
-        counterRot = 270;
+        // /Rotate=90 is 90° CW; CTM: screen_x=raw_y, screen_y=raw_x
+        rx = fy * mW + vStampH;
+        ry = fx * mH;
+        counterRot = 90;
       } else if (rotation === 180) {
-        // Visual dims: vW=mW, vH=mH  |  screen: x=mW-raw_x, y=raw_y
+        // /Rotate=180; CTM: screen_x=mW-raw_x, screen_y=raw_y
         rx = (1 - fx) * mW;
         ry = fy * mH + vStampH;
         counterRot = 180;
       } else if (rotation === 270) {
-        // Visual dims: vW=mH, vH=mW  |  screen: x=raw_y, y=raw_x
-        rx = fy * mW + vStampH;
-        ry = fx * mH;
-        counterRot = 90;
+        // /Rotate=270 is 270° CW (= 90° CCW); CTM: screen_x=mH-raw_y, screen_y=mW-raw_x
+        rx = (1 - fy) * mW - vStampH;
+        ry = (1 - fx) * mH;
+        counterRot = 270;
       } else {
         // rotation === 0: standard — PDF Y is bottom-up, canvas Y is top-down
         rx = fx * mW;
