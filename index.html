@@ -1337,14 +1337,16 @@ async function exportFileToPDF(fi, fiOrder, total) {
       const pg = i + 1;
       const page = pages[i];
 
-      // pdf-lib getSize() returns visual (post-rotation) dimensions.
-      // drawImage() however operates in raw PDF coordinate space (pre-rotation).
-      // We must transform the visual-space position to raw coords AND pre-rotate
-      // the stamp by -R so the viewer's /Rotate cancels it out.
-      const rotation = page.getRotation().angle; // 0 | 90 | 180 | 270 (CCW)
-      const { width: vW, height: vH } = page.getSize(); // visual dims
-      const mW = (rotation === 90 || rotation === 270) ? vH : vW; // raw MediaBox width
-      const mH = (rotation === 90 || rotation === 270) ? vW : vH; // raw MediaBox height
+      // pdf-lib getSize() returns raw MediaBox dims, ignoring /Rotate.
+      // drawImage() also operates in raw PDF coordinate space (pre-rotation).
+      // We derive visual dims from raw dims + rotation, then transform the
+      // visual-space position to raw coords AND pre-rotate the stamp by -R
+      // so the viewer's /Rotate cancels it out, leaving the stamp upright.
+      const rotation = page.getRotation().angle; // 0 | 90 | 180 | 270 (CW per PDF spec)
+      const { width: mW, height: mH } = page.getSize(); // raw MediaBox dims
+      // Visual (display) dimensions — what pdf.js renders and the user sees
+      const vW = (rotation === 90 || rotation === 270) ? mH : mW;
+      const vH = (rotation === 90 || rotation === 270) ? mW : mH;
 
       // Stamp size expressed in visual space (what the user sees)
       const vStampW = vW * S.stampSize;
