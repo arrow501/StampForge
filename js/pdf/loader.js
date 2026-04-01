@@ -42,9 +42,11 @@ export function removeFile(fileIdx) {
   // Remove cache entries for this file's pages
   const pagesForFile = S.pages.filter(p => p.fileIdx === fileIdx);
   for (const p of pagesForFile) {
-    const k = pageKey(p.fileIdx, p.pageNum);
-    if (S.pageCache[k]) { S.pageCache[k].close?.(); delete S.pageCache[k]; }
-    delete S.pageStamps[k];
+    const prefix = pageKey(p.fileIdx, p.pageNum);
+    for (const k of Object.keys(S.pageCache)) {
+      if (k.startsWith(prefix + ':')) { S.pageCache[k].close?.(); delete S.pageCache[k]; }
+    }
+    delete S.pageStamps[prefix];
   }
   S.files.splice(fileIdx, 1);
   // Remove pages and re-index fileIdx for files after the removed one
@@ -66,7 +68,7 @@ export function removeFile(fileIdx) {
  * @returns {Promise<ImageBitmap>}
  */
 export async function renderPage(fileIdx, pageNum, targetWidth, forceRefresh = false) {
-  const k = pageKey(fileIdx, pageNum);
+  const k = `${pageKey(fileIdx, pageNum)}:${targetWidth}`;
   if (!forceRefresh && S.pageCache[k]) return S.pageCache[k];
 
   const file = S.files[fileIdx];
@@ -82,7 +84,11 @@ export async function renderPage(fileIdx, pageNum, targetWidth, forceRefresh = f
   await page.render({ canvasContext: ctx, viewport }).promise;
 
   const bitmap = await createImageBitmap(canvas);
-  if (S.pageCache[k]) S.pageCache[k].close?.();
+  // Evict any previously cached widths for this page before storing the new one
+  const prefix = pageKey(fileIdx, pageNum) + ':';
+  for (const ck of Object.keys(S.pageCache)) {
+    if (ck.startsWith(prefix)) { S.pageCache[ck].close?.(); delete S.pageCache[ck]; }
+  }
   S.pageCache[k] = bitmap;
   return bitmap;
 }

@@ -25,7 +25,7 @@ export const S = {
   autoPlace: {
     enabled:    true,
     area:       { x: 0.05, y: 0.55, w: 0.9, h: 0.4 },
-    defaultPos: { x: 0.62, y: 0.75 },
+    defaultPos: { x: 0.30, y: 0.70 },
   },
 
   // Rendered page cache
