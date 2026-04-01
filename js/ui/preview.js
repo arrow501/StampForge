@@ -86,12 +86,15 @@ export function initDrag() {
     e.preventDefault();
 
     const pg = curPageObj();
+    // Convert normalised stamp position to canvas pixels for a correct pixel offset
+    const dispW = $sc[0].width;
+    const dispH = $sc[0].height;
     S.dragState = {
       stampId:  hit.stampId,
       fileIdx:  pg.fileIdx,
       pageNum:  pg.pageNum,
-      offsetX:  pos.x - hit.pos.x,
-      offsetY:  pos.y - hit.pos.y,
+      offsetX:  pos.x - hit.pos.x * dispW,
+      offsetY:  pos.y - hit.pos.y * dispH,
     };
     $sc.css('cursor', 'grabbing');
   });
