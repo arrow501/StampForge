@@ -1,13 +1,16 @@
 // Minimap widget: shows auto-place search zone and default position.
 // User can drag the dot to set defaultPos or draw a rectangle to set the zone.
+// The canvas is square; the current page is drawn inside with correct aspect ratio.
 
 import $ from 'jquery';
 import { S } from '../state.js';
+import { getCurPageInfo } from './preview.js';
 import { invalidateAutoplacements } from '../stamp/manager.js';
 import { saveSettings } from '../utils/storage.js';
 
-const MM_W = 236, MM_H = 160;   // canvas dimensions (matches index.html)
-const DOT_R = 5;
+const MM_SZ  = 220;   // canvas is square (matches index.html)
+const PAD    = 10;    // padding around page rect within canvas
+const DOT_R  = 5;
 
 let _mmDrag  = null;   // 'dot' | 'zone' | 'moveZone'
 let _mmStart = null;
@@ -18,18 +21,21 @@ export function renderMinimap() {
   const canvas = document.getElementById('minimap');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, MM_W, MM_H);
+  ctx.clearRect(0, 0, MM_SZ, MM_SZ);
 
-  const ap = S.autoPlace;
+  const ap   = S.autoPlace;
+  const rect = _pageRect();
 
-  // Page background
+  // Page background (the letterboxed page area)
   ctx.fillStyle = '#3a3a3a';
-  ctx.roundRect(0, 0, MM_W, MM_H, 4);
+  ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 4);
   ctx.fill();
 
-  // Auto-place zone (hatched)
-  const zx = ap.area.x * MM_W, zy = ap.area.y * MM_H;
-  const zw = ap.area.w * MM_W, zh = ap.area.h * MM_H;
+  // Auto-place zone (hatched), mapped through page rect
+  const zx = rect.x + ap.area.x * rect.w;
+  const zy = rect.y + ap.area.y * rect.h;
+  const zw = ap.area.w * rect.w;
+  const zh = ap.area.h * rect.h;
 
   ctx.save();
   ctx.beginPath();
@@ -55,17 +61,22 @@ export function renderMinimap() {
   ctx.strokeRect(zx + 0.5, zy + 0.5, zw - 1, zh - 1);
   ctx.setLineDash([]);
 
-  // Default position dot
-  const dx = ap.defaultPos.x * MM_W;
-  const dy = ap.defaultPos.y * MM_H;
+  // Default position dot, mapped through page rect
+  const dx = rect.x + ap.defaultPos.x * rect.w;
+  const dy = rect.y + ap.defaultPos.y * rect.h;
 
-  // Crosshairs
+  // Crosshairs (clipped to page rect)
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.w, rect.h);
+  ctx.clip();
   ctx.strokeStyle = 'rgba(255,255,255,0.3)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(dx, 0);    ctx.lineTo(dx, MM_H);
-  ctx.moveTo(0, dy);    ctx.lineTo(MM_W, dy);
+  ctx.moveTo(dx, rect.y); ctx.lineTo(dx, rect.y + rect.h);
+  ctx.moveTo(rect.x, dy); ctx.lineTo(rect.x + rect.w, dy);
   ctx.stroke();
+  ctx.restore();
 
   // Dot
   ctx.beginPath();
@@ -82,15 +93,16 @@ export function initMinimap() {
   if (!canvas) return;
 
   canvas.addEventListener('mousedown', e => {
-    const pos = _mmPos(e, canvas);
-    const ap  = S.autoPlace;
-    const dx  = ap.defaultPos.x * MM_W;
-    const dy  = ap.defaultPos.y * MM_H;
+    const pos  = _mmPos(e, canvas);
+    const rect = _pageRect();
+    const ap   = S.autoPlace;
+    const dx   = rect.x + ap.defaultPos.x * rect.w;
+    const dy   = rect.y + ap.defaultPos.y * rect.h;
 
     // Hit test: dot
     if (Math.hypot(pos.x - dx, pos.y - dy) <= DOT_R + 3) {
       _mmDrag = 'dot';
-    } else if (_inZone(pos)) {
+    } else if (_inZone(pos, rect)) {
       _mmDrag = 'moveZone';
       _mmStart = { pos, zone: { ...ap.area } };
     } else {
@@ -102,13 +114,14 @@ export function initMinimap() {
   $(document).on('mousemove', e => {
     if (!_mmDrag) return;
     const canvas2 = document.getElementById('minimap');
-    const pos = _mmPos(e, canvas2);
+    const pos  = _mmPos(e, canvas2);
+    const rect = _pageRect();
 
     if (_mmDrag === 'dot') {
-      S.autoPlace.defaultPos = _clamp(pos.x / MM_W, pos.y / MM_H);
+      S.autoPlace.defaultPos = _toNorm(pos.x, pos.y, rect);
     } else if (_mmDrag === 'moveZone') {
-      const dx = (pos.x - _mmStart.pos.x) / MM_W;
-      const dy = (pos.y - _mmStart.pos.y) / MM_H;
+      const dx = (pos.x - _mmStart.pos.x) / rect.w;
+      const dy = (pos.y - _mmStart.pos.y) / rect.h;
       S.autoPlace.area = {
         x: Math.max(0, Math.min(1 - _mmStart.zone.w, _mmStart.zone.x + dx)),
         y: Math.max(0, Math.min(1 - _mmStart.zone.h, _mmStart.zone.y + dy)),
@@ -116,14 +129,12 @@ export function initMinimap() {
         h: _mmStart.zone.h,
       };
     } else if (_mmDrag === 'zone') {
-      const x1 = Math.min(_mmStart.x, pos.x) / MM_W;
-      const y1 = Math.min(_mmStart.y, pos.y) / MM_H;
-      const x2 = Math.max(_mmStart.x, pos.x) / MM_W;
-      const y2 = Math.max(_mmStart.y, pos.y) / MM_H;
-      const w  = x2 - x1, h = y2 - y1;
+      const n1 = _toNorm(Math.min(_mmStart.x, pos.x), Math.min(_mmStart.y, pos.y), rect);
+      const n2 = _toNorm(Math.max(_mmStart.x, pos.x), Math.max(_mmStart.y, pos.y), rect);
+      const w  = n2.x - n1.x, h = n2.y - n1.y;
       if (w > 0.03 && h > 0.03) {
-        S.autoPlace.area = { x: x1, y: y1, w, h };
-        S.autoPlace.defaultPos = { x: x1 + w / 2, y: y1 + h / 2 };
+        S.autoPlace.area = { x: n1.x, y: n1.y, w, h };
+        S.autoPlace.defaultPos = { x: n1.x + w / 2, y: n1.y + h / 2 };
       }
     }
 
@@ -151,17 +162,42 @@ export function initMinimap() {
 
 // ── Internals ────────────────────────────────────────────────────────────────
 
+/**
+ * Compute the letterboxed page rectangle within the square canvas.
+ * Falls back to A4 portrait aspect if no page is loaded yet.
+ */
+function _pageRect() {
+  const info   = getCurPageInfo();
+  const aspect = info ? (info.vW / info.vH) : (1 / Math.SQRT2); // A4 portrait fallback
+  const inner  = MM_SZ - PAD * 2;
+  const pw     = aspect >= 1 ? inner : inner * aspect;
+  const ph     = aspect >= 1 ? inner / aspect : inner;
+  return {
+    x: Math.round((MM_SZ - pw) / 2),
+    y: Math.round((MM_SZ - ph) / 2),
+    w: Math.round(pw),
+    h: Math.round(ph),
+  };
+}
+
+/** Convert canvas-pixel position to page-normalised [0,1] coordinates, clamped. */
+function _toNorm(cx, cy, rect) {
+  return {
+    x: Math.max(0, Math.min(1, (cx - rect.x) / rect.w)),
+    y: Math.max(0, Math.min(1, (cy - rect.y) / rect.h)),
+  };
+}
+
 function _mmPos(e, canvas) {
   const r = canvas.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
+  const sx = canvas.width  / r.width;
+  const sy = canvas.height / r.height;
+  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
 }
 
-function _inZone(pos) {
+function _inZone(pos, rect) {
   const { x, y, w, h } = S.autoPlace.area;
-  return pos.x >= x * MM_W && pos.x <= (x + w) * MM_W &&
-         pos.y >= y * MM_H && pos.y <= (y + h) * MM_H;
-}
-
-function _clamp(x, y) {
-  return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
+  const zx = rect.x + x * rect.w, zy = rect.y + y * rect.h;
+  return pos.x >= zx && pos.x <= zx + w * rect.w &&
+         pos.y >= zy && pos.y <= zy + h * rect.h;
 }

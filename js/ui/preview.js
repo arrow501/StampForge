@@ -13,6 +13,8 @@ const HANDLE_COLORS = ['#3584e4', '#57e389', '#ffa348', '#ff7b63', '#c061cb'];
 let _lastBitmap = null;   // cached for redraw without re-render
 let _pageInfo   = null;   // {vW,vH,mW,mH,rotation} for current page
 
+export const getCurPageInfo = () => _pageInfo;
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export async function renderCurrentPage() {
