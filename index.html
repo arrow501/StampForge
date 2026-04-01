@@ -155,6 +155,9 @@ body {
 }
 .file-item:hover .remove { opacity: 1; }
 .file-item .remove:hover { color: var(--danger); }
+.file-item.loading { opacity: 0.55; pointer-events: none; }
+.file-item.loading .pages { animation: blink 1s ease-in-out infinite; }
+@keyframes blink { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
 
 /* Stamp section */
 #stamp-drop {
@@ -754,6 +757,14 @@ async function loadPDFs(files) {
   if (!newFiles.length) return;
 
   for (const file of newFiles) {
+    // Show placeholder immediately so the user sees something happening
+    const $placeholder = $(`<div class="file-item loading">
+      <span class="fname" title="${file.name}">${file.name}</span>
+      <span class="pages">…</span>
+    </div>`);
+    $fileList.append($placeholder);
+    $('#empty-state').hide();
+
     const ab = await file.arrayBuffer();
     const pdfDoc = await pdfjsLib.getDocument({data: ab.slice(0)}).promise;
     const entry = { name: file.name, arrayBuffer: ab, pdfDoc, pageCount: pdfDoc.numPages };
@@ -762,10 +773,10 @@ async function loadPDFs(files) {
     for (let pg = 1; pg <= pdfDoc.numPages; pg++) {
       S.pages.push({ fileIdx: fi, pageNum: pg });
     }
+    $placeholder.remove();
     renderFileItem(fi);
   }
 
-  $('#empty-state').hide();
   $pageWrap.show();
   $('#btn-process').prop('disabled', false);
   await goTo(S.cursor);
