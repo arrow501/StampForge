@@ -56,3 +56,11 @@ export function cssSize(el) {
   const r = el.getBoundingClientRect();
   return { w: r.width, h: r.height };
 }
+
+// Convert a mouse event to canvas-pixel coordinates, accounting for CSS scaling
+export function clientToCanvas(e, canvas) {
+  const r  = canvas.getBoundingClientRect();
+  const sx = canvas.width  / r.width;
+  const sy = canvas.height / r.height;
+  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+}

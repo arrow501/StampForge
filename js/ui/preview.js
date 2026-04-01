@@ -6,6 +6,7 @@ import { S, curPageObj, curKey } from '../state.js';
 import { renderPage, getPageInfo } from '../pdf/loader.js';
 import { getOrComputePlacements, setPlacementPos, resetPlacement,
          stampDisplaySize, getStamp } from '../stamp/manager.js';
+import { clientToCanvas } from '../utils/canvas.js';
 
 // Stamp handle colours (one per stamp slot)
 const HANDLE_COLORS = ['#3584e4', '#57e389', '#ffa348', '#ff7b63', '#c061cb'];
@@ -74,8 +75,11 @@ export function initNavigation() {
     if (e.key === ' ')          _toggleSkipCurrent();
   });
 
+  let _wheelTimer = null;
   document.getElementById('preview-area').addEventListener('wheel', e => {
     e.preventDefault();
+    if (_wheelTimer) return;
+    _wheelTimer = setTimeout(() => { _wheelTimer = null; }, 150);
     _navigate(e.deltaY > 0 ? 1 : -1);
   }, { passive: false });
 }
@@ -207,16 +211,7 @@ async function _drawStampLayer(pg, info, dispW, dispH) {
   }
 }
 
-/** Convert mouse event coordinates to canvas-pixel space */
-function _canvasPos(e, canvas) {
-  const r = canvas.getBoundingClientRect();
-  const scaleX = canvas.width  / r.width;
-  const scaleY = canvas.height / r.height;
-  return {
-    x: (e.clientX - r.left) * scaleX,
-    y: (e.clientY - r.top)  * scaleY,
-  };
-}
+const _canvasPos = clientToCanvas;
 
 /** Return the placement hit at canvas position, or null */
 function _hitTest(pos) {

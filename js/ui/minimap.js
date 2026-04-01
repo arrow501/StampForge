@@ -6,17 +6,19 @@ import $ from 'jquery';
 import { S } from '../state.js';
 import { invalidateAutoplacements } from '../stamp/manager.js';
 import { saveSettings } from '../utils/storage.js';
+import { clientToCanvas } from '../utils/canvas.js';
 
 const MM_SZ = 220;   // canvas is square (matches index.html)
 const DOT_R = 5;
 
-let _mmDrag  = null;   // 'dot' | 'zone' | 'moveZone'
-let _mmStart = null;
+let _mmCanvas = null;
+let _mmDrag   = null;   // 'dot' | 'zone' | 'moveZone'
+let _mmStart  = null;
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export function renderMinimap() {
-  const canvas = document.getElementById('minimap');
+  const canvas = _mmCanvas;
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, MM_SZ, MM_SZ);
@@ -78,11 +80,12 @@ export function renderMinimap() {
 }
 
 export function initMinimap() {
-  const canvas = document.getElementById('minimap');
-  if (!canvas) return;
+  _mmCanvas = document.getElementById('minimap');
+  if (!_mmCanvas) return;
+  const canvas = _mmCanvas;
 
   canvas.addEventListener('mousedown', e => {
-    const pos = _mmPos(e, canvas);
+    const pos = clientToCanvas(e, canvas);
     const ap  = S.autoPlace;
     const dx  = ap.defaultPos.x * MM_SZ;
     const dy  = ap.defaultPos.y * MM_SZ;
@@ -100,8 +103,7 @@ export function initMinimap() {
 
   $(document).on('mousemove', e => {
     if (!_mmDrag) return;
-    const canvas2 = document.getElementById('minimap');
-    const pos = _mmPos(e, canvas2);
+    const pos = clientToCanvas(e, canvas);
 
     if (_mmDrag === 'dot') {
       S.autoPlace.defaultPos = _clamp(pos.x / MM_SZ, pos.y / MM_SZ);
@@ -149,13 +151,6 @@ export function initMinimap() {
 }
 
 // ── Internals ────────────────────────────────────────────────────────────────
-
-function _mmPos(e, canvas) {
-  const r  = canvas.getBoundingClientRect();
-  const sx = canvas.width  / r.width;
-  const sy = canvas.height / r.height;
-  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
-}
 
 function _inZone(pos) {
   const { x, y, w, h } = S.autoPlace.area;

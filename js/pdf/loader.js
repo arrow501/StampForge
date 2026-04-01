@@ -84,7 +84,11 @@ export async function renderPage(fileIdx, pageNum, targetWidth, forceRefresh = f
   await page.render({ canvasContext: ctx, viewport }).promise;
 
   const bitmap = await createImageBitmap(canvas);
-  if (S.pageCache[k]) S.pageCache[k].close?.();
+  // Evict any previously cached widths for this page before storing the new one
+  const prefix = pageKey(fileIdx, pageNum) + ':';
+  for (const ck of Object.keys(S.pageCache)) {
+    if (ck.startsWith(prefix)) { S.pageCache[ck].close?.(); delete S.pageCache[ck]; }
+  }
   S.pageCache[k] = bitmap;
   return bitmap;
 }
