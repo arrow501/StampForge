@@ -6,17 +6,20 @@
 //   mW, mH        — raw MediaBox dimensions (what pdf-lib sees)
 //   rotation      — page /Rotate value (0 | 90 | 180 | 270)
 //
-// The viewer applies /Rotate CCW when displaying the page.
-// We pre-rotate the stamp by (360 - rotation) so it appears upright.
+// /Rotate N means the viewer rotates the raw page N° CW to display it.
 //
-// Viewer screen→raw inverse transforms (screen y-axis is down):
-//   R=0:   px = sx,      py = mH - sy
-//   R=90:  px = mW - sy, py = sx
-//   R=180: px = mW - sx, py = sy
-//   R=270: px = sy,      py = mH - sx
+// Verified viewer transforms (raw PDF → screen, screen origin top-left, y down):
+//   R=0:   sx = raw_x,      sy = mH - raw_y     visual: mW×mH
+//   R=90:  sx = mH - raw_y, sy = mW - raw_x     visual: mH×mW
+//   R=180: sx = mW - raw_x, sy = raw_y           visual: mW×mH
+//   R=270: sx = raw_y,      sy = raw_x           visual: mH×mW
 //
-// All formulas verified by working through the full rotation matrix algebra.
-// See /root/.claude/plans/expressive-sleeping-twilight.md for derivation.
+// Formulas verified numerically against all 4 corner mappings.
+// pdf-lib counterRot bounding boxes (W=vStampW, H=vStampH, pivot at rx,ry):
+//   cR=0:   [rx, rx+W] × [ry, ry+H]
+//   cR=270: [rx, rx+H] × [ry-W, ry]
+//   cR=180: [rx-W, rx] × [ry-H, ry]
+//   cR=90:  [rx-H, rx] × [ry, ry+W]
 
 /**
  * @param {number} fx
@@ -40,10 +43,9 @@ export function visualToRaw(fx, fy, vStampW, vStampH, mW, mH, rotation) {
         counterRot: 0,
       };
     case 90:
-      // V1 had ry = (1-fx)*mH  ← was wrong; correct: fx*mH + vStampW
       return {
         rx: (1 - fy) * mW - vStampH,
-        ry: fx * mH + vStampW,
+        ry: (1 - fx) * mH,
         counterRot: 270,
       };
     case 180:
@@ -53,10 +55,9 @@ export function visualToRaw(fx, fy, vStampW, vStampH, mW, mH, rotation) {
         counterRot: 180,
       };
     case 270:
-      // V1 had ry = fx*mH  ← was wrong; correct: (1-fx)*mH - vStampW
       return {
         rx: fy * mW + vStampH,
-        ry: (1 - fx) * mH - vStampW,
+        ry: fx * mH,
         counterRot: 90,
       };
     default:
