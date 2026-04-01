@@ -51,6 +51,10 @@ $(async () => {
 
   // ── File inputs (label-driven, no trigger() needed) ──────────────────────
 
+  // Drop zone click → open file picker
+  document.getElementById('pdf-drop-zone').addEventListener('click', () => document.getElementById('input-pdfs').click());
+  document.getElementById('stamp-drop-zone').addEventListener('click', () => document.getElementById('input-stamp').click());
+
   document.getElementById('input-pdfs').addEventListener('change', async function () {
     const files = Array.from(this.files ?? []);
     this.value = '';

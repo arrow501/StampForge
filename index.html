@@ -9,11 +9,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
-  <!-- Import map: resolves 'jquery' to jQuery 4 ESM -->
+  <!-- Import map: resolves 'jquery' to local vendored jQuery 4 ESM (avoids CDN 403) -->
   <script type="importmap">
     {
       "imports": {
-        "jquery": "https://cdn.jsdelivr.net/npm/jquery@4.0.0-rc.2/dist/jquery.esm.min.js"
+        "jquery": "./vendor/jquery.module.min.js"
       }
     }
   </script>
@@ -76,8 +76,8 @@
             </span>
           </div>
           <div class="section-body">
-            <!-- Drop zone — label click opens file picker natively, no JS needed -->
-            <label for="input-pdfs" class="drop-zone" id="pdf-drop-zone">
+            <!-- Drop zone — click handler wired in app.js -->
+            <div class="drop-zone" id="pdf-drop-zone">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/>
                 <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -85,7 +85,7 @@
               </svg>
               <span class="drop-zone-label">Drop PDFs here</span>
               <span class="drop-zone-hint">or click to browse · multiple supported</span>
-            </label>
+            </div>
             <input type="file" id="input-pdfs" accept=".pdf" multiple />
 
             <div id="file-list"></div>
@@ -136,8 +136,8 @@
             </span>
           </div>
           <div class="section-body">
-            <!-- Stamp drop zone -->
-            <label for="input-stamp" class="drop-zone" id="stamp-drop-zone">
+            <!-- Stamp drop zone — click handler wired in app.js -->
+            <div class="drop-zone" id="stamp-drop-zone">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5"/>
                 <circle cx="8.5" cy="8.5" r="2" stroke="currentColor" stroke-width="1.5"/>
@@ -146,7 +146,7 @@
               </svg>
               <span class="drop-zone-label">Drop stamp image here</span>
               <span class="drop-zone-hint">or click to browse · PNG / JPEG / WebP</span>
-            </label>
+            </div>
             <input type="file" id="input-stamp" accept="image/png,image/jpeg,image/webp" />
 
             <div id="stamp-palette" class="stamp-palette"></div>
