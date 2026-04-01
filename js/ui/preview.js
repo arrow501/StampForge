@@ -73,6 +73,11 @@ export function initNavigation() {
     if (e.key === 'ArrowRight') _navigate(1);
     if (e.key === ' ')          _toggleSkipCurrent();
   });
+
+  document.getElementById('preview-area').addEventListener('wheel', e => {
+    e.preventDefault();
+    _navigate(e.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
 }
 
 export function initDrag() {
