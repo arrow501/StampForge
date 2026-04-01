@@ -95,15 +95,29 @@ html, body {
   padding: var(--sp-4);
 }
 
-/* ── Bottom bar in content (nav + autoplace) ── */
-#bottom-bar {
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  padding: var(--sp-2) var(--sp-4);
+/* ── Nav overlay (floats over preview area) ── */
+#nav-overlay {
+  position: absolute;
+  bottom: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
-  flex-shrink: 0;
+  gap: var(--sp-2);
+  background: rgba(20, 20, 20, 0.72);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-l);
+  padding: 4px var(--sp-2);
+  z-index: 5;
+}
+
+#nav-overlay #page-counter {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  min-width: 56px;
+  text-align: center;
 }
 
 /* ── Sidebar sections ── */

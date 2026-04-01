@@ -1,5 +1,57 @@
 /* Reusable UI components */
 
+/* ── Drop zones ── */
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  margin: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-2);
+  border: 1.5px dashed var(--border-focus);
+  border-radius: var(--r-m);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+  text-align: center;
+  min-height: 72px;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+
+.drop-zone svg { opacity: 0.6; flex-shrink: 0; }
+.drop-zone:hover svg, .drop-zone.drag-over svg { opacity: 1; }
+
+.drop-zone-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: inherit;
+}
+
+.drop-zone-hint {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* Hide the actual file input but keep it accessible */
+#input-pdfs,
+#input-stamp {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ── Buttons ── */
 .btn {
   display: inline-flex;

@@ -95,6 +95,7 @@ export function initSliders() {
 export function initStampInput() {
   $('#input-stamp').on('change', async function () {
     const files = Array.from(this.files ?? []);
+    this.value = '';
     if (!files.length) return;
     for (const file of files) {
       try {

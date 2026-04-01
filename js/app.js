@@ -55,14 +55,14 @@ $(async () => {
 
   // ── Event wiring ────────────────────────────────────────────────────────
 
-  // File input button
-  $('#btn-add-files').on('click', () => $('#input-pdfs').trigger('click'));
+  // File inputs — triggered by their <label for> wrappers natively
   $('#input-pdfs').on('change', async function () {
     const files = Array.from(this.files ?? []);
     if (!files.length) return;
     this.value = '';
     await _loadFiles(files);
   });
+
 
   // Export
   $('#btn-export').on('click', exportAll);
@@ -98,7 +98,7 @@ $(async () => {
     // Already redrawn during drag; just ensure sidebar reflects skipped state
   });
 
-  // ── Drag-and-drop (global) ───────────────────────────────────────────────
+  // ── Drag-and-drop ────────────────────────────────────────────────────────
 
   let _dragCounter = 0;
 
@@ -117,12 +117,22 @@ $(async () => {
       e.preventDefault();
       _dragCounter = 0;
       $('#drop-overlay').removeClass('active');
+      $('.drop-zone').removeClass('drag-over');
       const files = Array.from(e.originalEvent.dataTransfer.files);
       const pdfs   = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
       const images = files.filter(f => f.type.startsWith('image/'));
       if (pdfs.length)   await _loadFiles(pdfs);
       if (images.length) await _loadStampImages(images);
     });
+
+  // Highlight specific drop zones on hover
+  $('#pdf-drop-zone')
+    .on('dragenter dragover', e => { e.preventDefault(); e.stopPropagation(); $(e.currentTarget).addClass('drag-over'); })
+    .on('dragleave drop', e => { $(e.currentTarget).removeClass('drag-over'); });
+
+  $('#stamp-drop-zone')
+    .on('dragenter dragover', e => { e.preventDefault(); e.stopPropagation(); $(e.currentTarget).addClass('drag-over'); })
+    .on('dragleave drop', e => { $(e.currentTarget).removeClass('drag-over'); });
 
   // ── Keyboard shortcut: Delete clears manual placement on current page ────
   $(document).on('keydown', e => {

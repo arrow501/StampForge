@@ -6,7 +6,7 @@ import { S } from '../state.js';
 import { invalidateAutoplacements } from '../stamp/manager.js';
 import { saveSettings } from '../utils/storage.js';
 
-const MM_W = 140, MM_H = 100;   // canvas dimensions (matches index.html)
+const MM_W = 236, MM_H = 160;   // canvas dimensions (matches index.html)
 const DOT_R = 5;
 
 let _mmDrag  = null;   // 'dot' | 'zone' | 'moveZone'
