@@ -34,7 +34,7 @@ export async function exportAll() {
 
       // Load PDF bytes — re-read via PDF.js internal buffer
       const pdfBytes = await _getPdfBytes(fi);
-      const pdfDoc   = await PDFDocument.load(pdfBytes);
+      const pdfDoc   = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
       const pages    = pdfDoc.getPages();
 
       // Embed all stamp images once per document
