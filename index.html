@@ -524,7 +524,8 @@ const S = {
   files: [],        // [{name, arrayBuffer, pdfDoc, pageCount}]
   pages: [],        // flat list: [{fileIdx, pageNum (1-based)}]
   cursor: 0,        // current index in S.pages
-  renderCache: {},  // key: "fi:pg" → ImageBitmap
+  renderCache: {},  // key: "fi:pg" → ImageBitmap (full-res)
+  lqCache: {},     // key: "fi:pg" → ImageBitmap (LQ impostor, LQ_WIDTH px wide)
   stamp: null,      // ImageBitmap
   stampImg: null,   // HTMLImageElement (for export)
   stampSize: 0.20,
@@ -775,6 +776,10 @@ async function loadPDFs(files) {
     }
     $placeholder.remove();
     renderFileItem(fi);
+    // Pre-render LQ impostors for all pages of this file in the background.
+    // These are cheap 400-px renders used as instant placeholders when
+    // navigating; they are never thrown away by stamp changes or new files.
+    for (let pg = 1; pg <= pdfDoc.numPages; pg++) renderPageLQ(fi, pg);
   }
 
   $pageWrap.show();
@@ -813,6 +818,7 @@ function removeFile(fi) {
   S.pages = S.pages.filter(p => p.fileIdx !== fi);
   // Clear cache and per-page position overrides for this file
   Object.keys(S.renderCache).forEach(k => { if (k.startsWith(fi+':')) delete S.renderCache[k]; });
+  Object.keys(S.lqCache).forEach(k => { if (k.startsWith(fi+':')) delete S.lqCache[k]; });
   Object.keys(S.stampPositions).forEach(k => { if (k.startsWith(fi+':')) delete S.stampPositions[k]; });
   $fileList.find(`[data-fi="${fi}"]`).remove();
   if (!S.pages.length) {
@@ -891,23 +897,24 @@ document.addEventListener('paste', async (e) => {
 });
 
 // ── Rendering ──
-async function renderPage(fi, pg, targetW) {
-  const key = pageKey(fi, pg);
-  if (S.renderCache[key]) return S.renderCache[key];
+const LQ_WIDTH = 400; // px — fast impostor rendered in the background
 
+async function renderPageInto(fi, pg, targetW, cache) {
+  const key = pageKey(fi, pg);
+  if (cache[key]) return cache[key];
   const pdfDoc = S.files[fi].pdfDoc;
   const page = await pdfDoc.getPage(pg);
   const vp0 = page.getViewport({ scale: 1 });
-  const scale = targetW / vp0.width;
-  const vp = page.getViewport({ scale });
-
+  const vp = page.getViewport({ scale: targetW / vp0.width });
   const cvs = new OffscreenCanvas(vp.width, vp.height);
-  const ctx = cvs.getContext('2d');
-  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  await page.render({ canvasContext: cvs.getContext('2d'), viewport: vp }).promise;
   const bmp = await createImageBitmap(cvs);
-  S.renderCache[key] = bmp;
+  cache[key] = bmp;
   return bmp;
 }
+
+function renderPage(fi, pg, targetW) { return renderPageInto(fi, pg, targetW, S.renderCache); }
+function renderPageLQ(fi, pg)        { return renderPageInto(fi, pg, LQ_WIDTH,  S.lqCache);    }
 
 function getTargetWidth() {
   const areaW = $canvasArea.width() - 80;
@@ -916,41 +923,49 @@ function getTargetWidth() {
   return Math.min(areaW, Math.round(areaH / 1.414));
 }
 
+function paintPage(bmp) {
+  $pageCanvas.width = bmp.width;
+  $pageCanvas.height = bmp.height;
+  $pageCanvas.getContext('2d').drawImage(bmp, 0, 0);
+  $pageWrap.css({ width: bmp.width, height: bmp.height });
+  $stampOver.width = bmp.width;
+  $stampOver.height = bmp.height;
+  $stampOver.style.width = bmp.width + 'px';
+  $stampOver.style.height = bmp.height + 'px';
+  $stampOver.style.display = 'block';
+}
+
 async function goTo(idx) {
   if (!S.pages.length) return;
   idx = Math.max(0, Math.min(S.pages.length - 1, idx));
   S.cursor = idx;
 
   const { fileIdx: fi, pageNum: pg } = S.pages[idx];
+  const key = pageKey(fi, pg);
   const targetW = getTargetWidth();
+
+  // Show LQ impostor immediately while the full-res render is in-flight
+  if (S.lqCache[key] && !S.renderCache[key]) {
+    paintPage(S.lqCache[key]);
+    refreshStampOverlay();
+  }
+
   const bmp = await renderPage(fi, pg, targetW);
+  if (S.cursor !== idx) return; // navigated away while waiting
 
-  // Draw to main canvas
-  $pageCanvas.width = bmp.width;
-  $pageCanvas.height = bmp.height;
-  $pageCanvas.getContext('2d').drawImage(bmp, 0, 0);
-
-  $pageWrap.css({ width: bmp.width, height: bmp.height });
-
-  // Stamp overlay canvas
-  $stampOver.width = bmp.width;
-  $stampOver.height = bmp.height;
-  $stampOver.style.width = bmp.width + 'px';
-  $stampOver.style.height = bmp.height + 'px';
-  $stampOver.style.display = 'block';
-
+  paintPage(bmp);
   refreshStampOverlay();
   updateNav();
 
-  // Prefetch neighbors
+  // Prefetch neighbors (HQ + LQ)
   prefetch(fi, pg - 1); prefetch(fi, pg + 1);
 }
 
 function prefetch(fi, pg) {
   if (pg < 1 || pg > S.files[fi]?.pageCount) return;
-  if (!S.renderCache[pageKey(fi, pg)]) {
-    renderPage(fi, pg, getTargetWidth());
-  }
+  const key = pageKey(fi, pg);
+  if (!S.renderCache[key]) renderPage(fi, pg, getTargetWidth());
+  if (!S.lqCache[key])     renderPageLQ(fi, pg);
 }
 
 // ── Stamp overlay ──
