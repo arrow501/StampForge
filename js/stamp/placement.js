@@ -36,8 +36,9 @@ export function autoPlaceAll(pageBitmap, vW, vH, stampIds, autoPlace, stampSize)
           y: placed.at(-1).pos.y + stampH / 2 }
       : autoPlace.defaultPos;
 
+    // Use scoreMap.w/h (post-downsample) so pixel coordinates match the score array.
     const pos = _findBestPosition(
-      scoreMap, pageBitmap.width, pageBitmap.height,
+      scoreMap, scoreMap.w, scoreMap.h,
       stampW, stampH,
       autoPlace.area,
       origin,
@@ -59,8 +60,9 @@ export function autoPlaceOne(pageBitmap, vW, vH, stampId, autoPlace, stampSize, 
   const scoreMap = _buildScoreMap(pageBitmap);
   const stampW = stampSize;
   const stampH = stampSize / aspect;
+  // Use scoreMap.w/h (post-downsample) so pixel coordinates match the score array.
   const pos = _findBestPosition(
-    scoreMap, pageBitmap.width, pageBitmap.height,
+    scoreMap, scoreMap.w, scoreMap.h,
     stampW, stampH,
     autoPlace.area,
     autoPlace.defaultPos,
@@ -69,13 +71,21 @@ export function autoPlaceOne(pageBitmap, vW, vH, stampId, autoPlace, stampSize, 
   return { stampId, pos, manual: false };
 }
 
+// Maximum width used for score-map analysis. Downsampling here gives a large
+// speedup (Sobel + Gauss scale with pixel count) with no meaningful quality loss
+// because auto-placement only needs to find coarse whitespace regions.
+const ANALYSIS_MAX_W = 300;
+
 // ── Score map construction ───────────────────────────────────────────────────
 
 function _buildScoreMap(bitmap) {
-  const w = bitmap.width, h = bitmap.height;
+  // Downsample to at most ANALYSIS_MAX_W pixels wide.
+  const scale = bitmap.width > ANALYSIS_MAX_W ? ANALYSIS_MAX_W / bitmap.width : 1;
+  const w = Math.round(bitmap.width  * scale);
+  const h = Math.round(bitmap.height * scale);
   const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.drawImage(bitmap, 0, 0, w, h);
   const { data } = ctx.getImageData(0, 0, w, h);
 
   // Grayscale + edge detection (Sobel)

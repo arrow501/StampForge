@@ -7,6 +7,11 @@ const pdfjs = window.pdfjsLib;
 pdfjs.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// In-flight render promises: avoids duplicate concurrent renders of the same page+width.
+const _inFlight = new Map();
+// Maximum number of pages to keep in the bitmap cache (older ones are evicted).
+const MAX_CACHE_PAGES = 20;
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -70,12 +75,24 @@ export function removeFile(fileIdx) {
 export async function renderPage(fileIdx, pageNum, targetWidth, forceRefresh = false) {
   const k = `${pageKey(fileIdx, pageNum)}:${targetWidth}`;
   if (!forceRefresh && S.pageCache[k]) return S.pageCache[k];
+  // Return in-flight promise for the same key to avoid duplicate renders.
+  if (!forceRefresh && _inFlight.has(k)) return _inFlight.get(k);
 
   const file = S.files[fileIdx];
   if (!file) throw new Error(`No file at index ${fileIdx}`);
 
+  const promise = _doRender(file, fileIdx, pageNum, targetWidth, k);
+  _inFlight.set(k, promise);
+  try {
+    return await promise;
+  } finally {
+    _inFlight.delete(k);
+  }
+}
+
+async function _doRender(file, fileIdx, pageNum, targetWidth, k) {
   const page = await file.pdfDoc.getPage(pageNum);
-  const { vW, vH } = getVisualDims(page);
+  const { vW } = getVisualDims(page);
   const scale = targetWidth / vW;
   const viewport = page.getViewport({ scale });
 
@@ -84,13 +101,39 @@ export async function renderPage(fileIdx, pageNum, targetWidth, forceRefresh = f
   await page.render({ canvasContext: ctx, viewport }).promise;
 
   const bitmap = await createImageBitmap(canvas);
-  // Evict any previously cached widths for this page before storing the new one
+  // Evict any previously cached widths for this page before storing the new one.
   const prefix = pageKey(fileIdx, pageNum) + ':';
   for (const ck of Object.keys(S.pageCache)) {
     if (ck.startsWith(prefix)) { S.pageCache[ck].close?.(); delete S.pageCache[ck]; }
   }
   S.pageCache[k] = bitmap;
+  _evictOldPages();
   return bitmap;
+}
+
+function _evictOldPages() {
+  const keys = Object.keys(S.pageCache);
+  if (keys.length > MAX_CACHE_PAGES) {
+    // Object key insertion order is preserved for string keys — oldest first.
+    const toEvict = keys.slice(0, keys.length - MAX_CACHE_PAGES);
+    for (const k of toEvict) { S.pageCache[k].close?.(); delete S.pageCache[k]; }
+  }
+}
+
+/**
+ * Fire-and-forget render for background prefetching.
+ * No-ops if the page is already cached or being rendered.
+ * @param {number} fileIdx
+ * @param {number} pageNum  1-based
+ * @param {number} targetWidth  pixels
+ */
+export function prefetchPage(fileIdx, pageNum, targetWidth) {
+  if (fileIdx < 0 || fileIdx >= S.files.length) return;
+  const pg = S.files[fileIdx];
+  if (!pg || pageNum < 1 || pageNum > pg.pageCount) return;
+  const k = `${pageKey(fileIdx, pageNum)}:${targetWidth}`;
+  if (S.pageCache[k] || _inFlight.has(k)) return;
+  renderPage(fileIdx, pageNum, targetWidth).catch(() => {});
 }
 
 /**

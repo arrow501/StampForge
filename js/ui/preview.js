@@ -3,7 +3,7 @@
 
 import $ from 'jquery';
 import { S, curPageObj, curKey } from '../state.js';
-import { renderPage, getPageInfo } from '../pdf/loader.js';
+import { renderPage, getPageInfo, prefetchPage } from '../pdf/loader.js';
 import { getOrComputePlacements, setPlacementPos, resetPlacement,
          stampDisplaySize, getStamp } from '../stamp/manager.js';
 import { clientToCanvas } from '../utils/canvas.js';
@@ -13,6 +13,8 @@ const HANDLE_COLORS = ['#3584e4', '#57e389', '#ffa348', '#ff7b63', '#c061cb'];
 
 let _lastBitmap = null;   // cached for redraw without re-render
 let _pageInfo   = null;   // {vW,vH,mW,mH,rotation} for current page
+let _renderSeq  = 0;      // incremented on each navigation; guards against stale renders
+let _navTimer   = null;   // debounce timer for keyboard navigation
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -20,12 +22,16 @@ export async function renderCurrentPage() {
   const pg = curPageObj();
   if (!pg) { _showEmpty(); return; }
 
+  // Increment sequence number so any in-flight render for a previous page can bail out.
+  const seq = ++_renderSeq;
+
   $('#canvas-wrap').show();
   $('#empty-state').hide();
 
   // Compute canvas display size (fills available space)
   const { w: areaW, h: areaH } = _previewAreaSize();
   const info = await getPageInfo(pg.fileIdx, pg.pageNum);
+  if (seq !== _renderSeq) return; // user navigated away while awaiting page info
   _pageInfo = info;
 
   const scale = Math.min(areaW / info.vW, areaH / info.vH) * 0.98;
@@ -38,21 +44,32 @@ export async function renderCurrentPage() {
   $pc.attr({ width: dispW, height: dispH }).css({ width: dispW, height: dispH });
   $sc.attr({ width: dispW, height: dispH }).css({ width: dispW, height: dispH });
 
-  // Render page at display resolution
-  const bitmap = await renderPage(pg.fileIdx, pg.pageNum, dispW);
-  _lastBitmap = bitmap;
+  // ── Step 1: Show a low-res preview immediately for instant visual feedback ──
+  const lowW = Math.max(64, Math.round(dispW / 4));
+  const lowBitmap = await renderPage(pg.fileIdx, pg.pageNum, lowW);
+  if (seq !== _renderSeq) return;
 
   const ctx = $pc[0].getContext('2d');
-  ctx.drawImage(bitmap, 0, 0, dispW, dispH);
-
-  // Skip badge
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'low';
+  ctx.drawImage(lowBitmap, 0, 0, dispW, dispH);
   $('#skip-badge').toggleClass('visible', pg.skipped);
+  _updateCounter();
+
+  // ── Step 2: Render at full display resolution and replace the preview ───────
+  const bitmap = await renderPage(pg.fileIdx, pg.pageNum, dispW);
+  if (seq !== _renderSeq) return;
+  _lastBitmap = bitmap;
+
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(bitmap, 0, 0, dispW, dispH);
 
   // Compute / fetch placements and draw stamp handles
   await _drawStampLayer(pg, info, dispW, dispH);
+  if (seq !== _renderSeq) return;
 
-  // Update page counter
-  _updateCounter();
+  // Prefetch adjacent pages in the background so the next navigation is instant.
+  _prefetchAdjacent(pg, dispW);
 }
 
 export function redrawStampLayer() {
@@ -241,7 +258,27 @@ function _navigate(delta) {
   if (next < 0 || next >= S.pages.length) return;
   S.curPage = next;
   import('./sidebar.js').then(m => m.updateCurrentPageHighlight());
-  renderCurrentPage();
+  // Update the counter immediately so the number tracks the key-hold visually.
+  _updateCounter();
+  // Debounce the actual render: when the user holds an arrow key we only render
+  // once they pause (80 ms), skipping the intermediate pages entirely.
+  if (_navTimer) clearTimeout(_navTimer);
+  _navTimer = setTimeout(() => {
+    _navTimer = null;
+    renderCurrentPage();
+  }, 80);
+}
+
+/** Prefetch N+1, N+2 and N-1 at the given display width in the background. */
+function _prefetchAdjacent(pg, dispW) {
+  const total = S.pages.length;
+  const cur   = S.curPage;
+  for (const offset of [1, 2, -1]) {
+    const idx = cur + offset;
+    if (idx < 0 || idx >= total) continue;
+    const p = S.pages[idx];
+    prefetchPage(p.fileIdx, p.pageNum, dispW);
+  }
 }
 
 function _toggleSkipCurrent() {
