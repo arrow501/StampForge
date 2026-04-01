@@ -11,8 +11,7 @@ import { renderFileList, renderPageList, updateCurrentPageHighlight,
          initSkipRangeInput } from './ui/sidebar.js';
 import { renderPalette, initSliders, initStampInput,
          initClipboardPaste } from './ui/stamp-panel.js';
-import { renderCurrentPage, redrawStampLayer,
-         initNavigation, initDrag } from './ui/preview.js';
+import { renderCurrentPage, initNavigation, initDrag } from './ui/preview.js';
 import { renderMinimap, initMinimap } from './ui/minimap.js';
 import { setExportEnabled, initSectionToggles, toast } from './ui/toolbar.js';
 
@@ -21,13 +20,10 @@ import { setExportEnabled, initSectionToggles, toast } from './ui/toolbar.js';
 $(async () => {
   // Restore settings from localStorage
   const savedStamps = loadSettings();
-
-  // Re-hydrate stamps from saved data URLs
   if (Array.isArray(savedStamps)) {
     for (const st of savedStamps) {
-      try {
-        await addStampFromDataUrl(st.id, st.name, st.dataUrl, st.defaultEnabled);
-      } catch (_) { /* ignore corrupt entries */ }
+      try { await addStampFromDataUrl(st.id, st.name, st.dataUrl, st.defaultEnabled); }
+      catch (_) { /* ignore corrupt entries */ }
     }
   }
 
@@ -48,121 +44,142 @@ $(async () => {
   initSkipRangeInput();
   initMinimap();
 
-  // Render initial palette (may be empty)
+  // Render initial state
   renderPalette();
   renderFileList();
   renderPageList();
 
-  // ── Event wiring ────────────────────────────────────────────────────────
+  // ── File inputs (label-driven, no trigger() needed) ──────────────────────
 
-  // File inputs — triggered by their <label for> wrappers natively
-  $('#input-pdfs').on('change', async function () {
+  document.getElementById('input-pdfs').addEventListener('change', async function () {
     const files = Array.from(this.files ?? []);
-    if (!files.length) return;
     this.value = '';
-    await _loadFiles(files);
+    if (files.length) await _loadFiles(files);
   });
 
+  // ── Export ────────────────────────────────────────────────────────────────
 
-  // Export
-  $('#btn-export').on('click', exportAll);
+  document.getElementById('btn-export').addEventListener('click', exportAll);
 
-  // Cross-module events
-  $(window).on('stampforge:pagechange', () => {
-    renderCurrentPage();
-    renderMinimap();
-  });
+  // ── Cross-module events ───────────────────────────────────────────────────
 
-  $(window).on('stampforge:fileschange', () => {
-    renderFileList();
-    renderPageList();
-    setExportEnabled(S.files.length > 0);
-    renderCurrentPage();
-  });
+  $(window)
+    .on('stampforge:pagechange',   () => { renderCurrentPage(); renderMinimap(); })
+    .on('stampforge:fileschange',  () => { renderFileList(); renderPageList(); setExportEnabled(S.files.length > 0); renderCurrentPage(); })
+    .on('stampforge:stampschange', () => { renderPalette(); renderCurrentPage(); })
+    .on('stampforge:settingschange', () => { renderCurrentPage(); renderMinimap(); })
+    .on('stampforge:skipchange',   () => renderCurrentPage());
 
-  $(window).on('stampforge:stampschange', () => {
-    renderPalette();
-    renderCurrentPage();
-  });
+  // ── Drag-and-drop (native events — jQuery 4 dropped originalEvent) ────────
 
-  $(window).on('stampforge:settingschange', () => {
-    renderCurrentPage();
-    renderMinimap();
-  });
+  _initDropZone(
+    document.getElementById('pdf-drop-zone'),
+    files => _loadFiles(files.filter(f => f.name.toLowerCase().endsWith('.pdf')))
+  );
 
-  $(window).on('stampforge:skipchange', () => {
-    renderCurrentPage();
-  });
+  _initDropZone(
+    document.getElementById('stamp-drop-zone'),
+    files => _loadStampImages(files.filter(f => f.type.startsWith('image/')))
+  );
 
-  $(window).on('stampforge:placementchange', () => {
-    // Already redrawn during drag; just ensure sidebar reflects skipped state
-  });
+  // Global drop fallback — catches drops on the canvas / empty area
+  _initGlobalDrop();
 
-  // ── Drag-and-drop ────────────────────────────────────────────────────────
+  // ── Keyboard: Delete clears manual placements on current page ────────────
 
-  let _dragCounter = 0;
-
-  $(document)
-    .on('dragenter', e => {
-      e.preventDefault();
-      _dragCounter++;
-      $('#drop-overlay').addClass('active');
-    })
-    .on('dragleave', () => {
-      _dragCounter--;
-      if (_dragCounter <= 0) { _dragCounter = 0; $('#drop-overlay').removeClass('active'); }
-    })
-    .on('dragover', e => { e.preventDefault(); })
-    .on('drop', async e => {
-      e.preventDefault();
-      _dragCounter = 0;
-      $('#drop-overlay').removeClass('active');
-      $('.drop-zone').removeClass('drag-over');
-      const files = Array.from(e.originalEvent.dataTransfer.files);
-      const pdfs   = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
-      const images = files.filter(f => f.type.startsWith('image/'));
-      if (pdfs.length)   await _loadFiles(pdfs);
-      if (images.length) await _loadStampImages(images);
-    });
-
-  // Highlight specific drop zones on hover
-  $('#pdf-drop-zone')
-    .on('dragenter dragover', e => { e.preventDefault(); e.stopPropagation(); $(e.currentTarget).addClass('drag-over'); })
-    .on('dragleave drop', e => { $(e.currentTarget).removeClass('drag-over'); });
-
-  $('#stamp-drop-zone')
-    .on('dragenter dragover', e => { e.preventDefault(); e.stopPropagation(); $(e.currentTarget).addClass('drag-over'); })
-    .on('dragleave drop', e => { $(e.currentTarget).removeClass('drag-over'); });
-
-  // ── Keyboard shortcut: Delete clears manual placement on current page ────
-  $(document).on('keydown', e => {
-    if ($(e.target).is('input, textarea')) return;
+  document.addEventListener('keydown', e => {
+    if (e.target.matches('input, textarea')) return;
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const pg = S.pages[S.curPage];
       if (!pg) return;
       const key = `${pg.fileIdx}:${pg.pageNum}`;
-      if (S.pageStamps[key]) {
-        S.pageStamps[key] = S.pageStamps[key].map(p => ({ ...p, manual: false }));
-        delete S.pageStamps[key];  // force recompute
-        renderCurrentPage();
-      }
+      if (S.pageStamps[key]) { delete S.pageStamps[key]; renderCurrentPage(); }
     }
   });
 
-  // Window resize: re-render current page at new size
-  $(window).on('resize', _debounce(() => renderCurrentPage(), 120));
+  // ── Resize ────────────────────────────────────────────────────────────────
+
+  window.addEventListener('resize', _debounce(() => renderCurrentPage(), 120));
 });
 
-// ── File loading helpers ─────────────────────────────────────────────────────
+// ── Drop zone helper ─────────────────────────────────────────────────────────
+
+/**
+ * Wire a single drop-zone element to receive file drops.
+ * Also handles drag-over visual feedback.
+ * @param {HTMLElement} el
+ * @param {function(File[]):void} onFiles
+ */
+function _initDropZone(el, onFiles) {
+  if (!el) return;
+
+  el.addEventListener('dragenter', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    el.classList.add('drag-over');
+  });
+
+  el.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    el.classList.add('drag-over');
+  });
+
+  el.addEventListener('dragleave', e => {
+    // Only remove class when leaving the zone itself, not a child
+    if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over');
+  });
+
+  el.addEventListener('drop', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    el.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) onFiles(files);
+  });
+}
+
+// ── Global drop (canvas area) ────────────────────────────────────────────────
+
+function _initGlobalDrop() {
+  const overlay = document.getElementById('drop-overlay');
+  let counter = 0;
+
+  document.addEventListener('dragenter', e => {
+    e.preventDefault();
+    counter++;
+    overlay.classList.add('active');
+  });
+
+  document.addEventListener('dragleave', e => {
+    // relatedTarget is null when leaving the browser window
+    if (e.relatedTarget === null) { counter = 0; overlay.classList.remove('active'); return; }
+    counter--;
+    if (counter <= 0) { counter = 0; overlay.classList.remove('active'); }
+  });
+
+  document.addEventListener('dragover', e => e.preventDefault());
+
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    counter = 0;
+    overlay.classList.remove('active');
+    // Drop zones handle their own files via stopPropagation; this catches the rest
+    const files = Array.from(e.dataTransfer.files);
+    const pdfs   = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    const images = files.filter(f => f.type.startsWith('image/'));
+    if (pdfs.length)   _loadFiles(pdfs);
+    if (images.length) _loadStampImages(images);
+  });
+}
+
+// ── File loading helpers ──────────────────────────────────────────────────────
 
 async function _loadFiles(files) {
-  let loaded = 0;
-  await loadPDFs(files, (n, total) => {
-    loaded = n;
-  });
-  if (S.pages.length > 0 && S.curPage >= S.pages.length) {
-    S.curPage = 0;
-  }
+  if (!files.length) return;
+  await loadPDFs(files);
+  if (S.curPage >= S.pages.length) S.curPage = 0;
   renderFileList();
   renderPageList();
   setExportEnabled(S.files.length > 0);
@@ -171,13 +188,12 @@ async function _loadFiles(files) {
 }
 
 async function _loadStampImages(files) {
+  if (!files.length) return;
   const { addStamp } = await import('./stamp/manager.js');
-  const { renderPalette: rp } = await import('./ui/stamp-panel.js');
   const { invalidateAutoplacements } = await import('./stamp/manager.js');
-
   for (const file of files) {
     try { await addStamp(file); }
-    catch (_) { toast('Failed to load stamp image', 'error'); }
+    catch (_) { toast('Failed to load stamp', 'error'); }
   }
   renderPalette();
   invalidateAutoplacements();
